@@ -123,6 +123,7 @@ levelorder f = \ta -> schedule ta `evalPlan` byLevel where
          fmap (fmap getLevelOrder . getCompose) . traverse f . Compose $ fmap LevelOrder tta 
     else traverse schedule tta `evalPlan` byLevel
 
+{-
 -- the bool specifies which child to prioritize
 dfs, bfs :: forall f a b. Applicative f => (a -> (f b, Bool)) -> Tree a -> f (Tree b)
 
@@ -143,6 +144,7 @@ bfs f = \ta -> schedule ta `evalPlan` byLevel where
          -- `pure (undefined <$> tta) works just as well
          fmap (fmap getLevelOrder . getCompose) . traverse f . Compose $ fmap LevelOrder tta 
     else traverse schedule tta `evalPlan` byLevel
+      -}
 
 -- |
 -- A 'Task' splits the computation of @f a@ in two, one that is 'prepared' to be computed 
