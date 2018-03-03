@@ -19,7 +19,7 @@ doc: dist/doc/html/tree-traversals dist/doc/html/README.html
 .cabal-sandbox:
 	cabal sandbox init
 
-dist/doc/html/tree-traversals: src/*.hs
+dist/doc/html/tree-traversals: $(shell find src -type f)
 	cabal haddock
 	touch $@
 

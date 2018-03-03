@@ -4,7 +4,10 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE Rank2Types #-}
-module Control.Applicative.Trans.Plan where
+module Control.Applicative.Trans.Plan 
+  ( Plan(..), evalPlan, runPlan, prepare, require
+  , Task(..)
+  ) where
 
 import Control.Applicative (liftA2)
 import Control.Arrow (first)
@@ -13,6 +16,8 @@ import Data.Functor.Const (Const(..))
 -- |
 -- A 'Task' splits the computation of @f a@ in two, one that is 'prepared' to be computed 
 -- in advance and another that is dependent upon the response to some requirements.
+--
+-- @f (t res -> a)@ and @t req@, waiting on @t req -> f (t res)@
 data Task s req res f a = forall t. Traversable t => Task 
   { prepared :: f (t res -> (a, s res)) 
   , required :: s req -> t req
@@ -51,9 +56,9 @@ instance Applicative f => Applicative (Plan req res f) where
       Task pref reqf -> Task
         { prepared = liftA2 apply pref prea
         , required = reqf . reqa
-        }
+        } where
 
--- | <*> for a shape-polymorphic indexed state monad 
+-- | '<*>' for a shape-polymorphic indexed state monad 
 apply :: (tf res -> (a -> b, ta res)) -> (ta res -> (a, s res)) -> (tf res -> (b, s res))
 apply hf ha (hf -> (f, ha -> (a, result))) = (f a, result)
 

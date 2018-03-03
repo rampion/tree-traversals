@@ -6,17 +6,29 @@ module Data.Tree.Binary where
 -- >>> :set -interactive-print pPrint
 
 -- | A binary tree
+--
+-- Since there are multiple ways to traverse a 'Tree', see 
+-- 'Data.Traversable.Tree.Binary' for newtype-wrappers with 'Traversable' instances.
 data Tree a = Leaf | Branch a (Tree a) (Tree a)
   deriving (Show, Functor, Eq)
 
--- data Direction = LeftBranch | RightBranch
---  - has Monoid instance preferring last
---  - useful for BFS/DFS
+data Direction = L | R
+  deriving (Show, Eq, Enum)
+
+type Path = [Direction]
+
+{-
+-- used to make 'Data.Traversable.Tree.Binary.bfs' and 'Data.Traversable.Tree.Binary.dfs'
+-- legal Traversals.
+instance Monoid Direction where
+  _ `mappend` dir = dir
+  mempty = ?
+-}
 
 -- |
--- an infinite tree of all paths from the root ('False' for left, 'True' for right)
-allDepths :: Tree [Bool]
-allDepths = Branch [] (fmap (False:) allDepths) (fmap (True:) allDepths)
+-- an infinite tree of all paths from the root
+allDepths :: Tree Path
+allDepths = Branch [] (fmap (L:) allDepths) (fmap (R:) allDepths)
 
 -- |
 -- generate a finite version of 'allDepths' up to a certain depth
@@ -25,15 +37,11 @@ allDepths = Branch [] (fmap (False:) allDepths) (fmap (True:) allDepths)
 -- Branch
 --   []
 --   (Branch
---      [ False ]
---      (Branch [ False , False ] Leaf Leaf)
---      (Branch [ False , True ] Leaf Leaf))
+--      [ L ] (Branch [ L , L ] Leaf Leaf) (Branch [ L , R ] Leaf Leaf))
 --   (Branch
---      [ True ]
---      (Branch [ True , False ] Leaf Leaf)
---      (Branch [ True , True ] Leaf Leaf))
-toDepth :: Int -> Tree [Bool]
+--      [ R ] (Branch [ R , L ] Leaf Leaf) (Branch [ R , R ] Leaf Leaf))
+toDepth :: Int -> Tree Path
 toDepth 0 = Leaf
-toDepth n = Branch [] (fmap (False:) t) (fmap (True:) t)
+toDepth n = Branch [] (fmap (L:) t) (fmap (R:) t)
   where t = toDepth (n - 1)
 
