@@ -29,7 +29,9 @@ flag Development
   manual: True
 
 library
-  exposed-modules:     Tree
+  exposed-modules: Data.Tree.Binary
+                 , Data.Traversable.Tree.Binary
+                 , Control.Applicative.Trans.Plan
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.10 && <4.11

@@ -1,0 +1,7 @@
+- rename Plan/Task -> BiPhase?
+    - Ask reddit before package release / after github upload
+- similarity to Haxl - compression example?
+- should I add traversals for Data.Tree?
+- support postlevelorder? (via bfs?)
+- are adhoc traversals possible? - maybe. see bfs/dfs
+    - is there a way to blend the two?
