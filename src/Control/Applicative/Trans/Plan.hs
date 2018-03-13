@@ -4,14 +4,58 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE TypeFamilies #-}
+-- | Defines an 'Applicative' transformer, 'Plan' that allows you to postpone
+-- certain side-effects to be computed as a batch.
+--
+-- Basic properties of 'Plan':
+--
+-- @
+-- fmap f m = pure f '<*>' m
+-- pure a = prepare (pure a)
+-- prepare x '<*>' prepare y = prepare (x '<*>' y)
+-- f '<$>' require x '<*>' prepare y = flip f '<$>' prepare x '<*>' require y
+-- @
+--  
+-- In general, these allow you to permute any general expression
+-- of type @Plan req res f a@ made of nothing but '<$>', 'pure', '<*>',
+-- 'prepare' and 'require' into an expression of the form:
+--
+-- @
+-- prepare x '<*>' require y1 '<*>' require y2 '<*>' ... '<*>' require yN
+-- @
+--
+-- Then we have
+-- 
+-- @
+-- evalPlan (prepare x '<*>' require y1 '<*>' require y2 '<*>' ... '<*>' require yN) g
+--   = uncurryN '<$>' x '<*>' g (y1 ``Cons`` y2 ``Cons`` ... ``Cons`` yN ``Cons`` Nil)
+-- @
+--
+-- where 
+--
+-- @
+-- class UncurryN t where
+--   type Fun t a b :: *
+--   uncurryN :: Fun t a b -> t a -> b
+-- 
+-- instance UncurryN Nil where
+--   type Fun Nil a b = b
+--   uncurryN f Nil = f
+--   
+-- instance UncurryN t => UncurryN (Cons t)  where
+--   type Fun (Cons t) a b = a -> Fun t a b
+--   uncurryN f (a ``Cons`` ta) = uncurryN (f a) ta
+-- @
+--
 module Control.Applicative.Trans.Plan 
   ( Plan(..), evalPlan, runPlan, prepare, require
+  , runWithQueue, traverseWithQueue
   , Task(..)
   ) where
 
 import Control.Applicative (liftA2)
 import Control.Arrow (first)
-import Data.Functor.Const (Const(..))
 
 -- |
 -- A 'Task' splits the computation of @f a@ in two, one that is 'prepared' to be computed 
@@ -56,9 +100,9 @@ instance Applicative f => Applicative (Plan req res f) where
       Task pref reqf -> Task
         { prepared = liftA2 apply pref prea
         , required = reqf . reqa
-        } where
+        }
 
--- | '<*>' for a shape-polymorphic indexed state monad 
+-- | '<*>' for a shape-changing indexed state monad 
 apply :: (tf res -> (a -> b, ta res)) -> (ta res -> (a, s res)) -> (tf res -> (b, s res))
 apply hf ha (hf -> (f, ha -> (a, result))) = (f a, result)
 
@@ -67,10 +111,10 @@ apply hf ha (hf -> (f, ha -> (a, result))) = (f a, result)
 -- requirements 
 --
 -- >>> helper s = putStrLn s >> return (length s)
--- >>> runPlan (pure 0) (traverse helper) ("hi" `Cons` "there" `Cons` Const ())
+-- >>> runPlan (pure 0) (traverse helper) ("hi" `Cons` "there" `Cons` Nil)
 -- hi
 -- there
--- ( 0 , 2 `Cons` (5 `Cons` Const ()) )
+-- ( 0 , 2 `Cons` (5 `Cons` Nil) )
 runPlan :: (Applicative f, Traversable s)
         => Plan req res f a
         -> (forall t. Traversable t => t req -> f (t res))  -- ^ how to resolve the task requirements
@@ -106,8 +150,12 @@ require req = Plan $ Task
 
 -- | 
 -- Container that prepends an element to a traversable
-data Cons s a = !a `Cons` !(s a) deriving (Show, Eq, Functor, Foldable, Traversable)
+data Cons s a = !a `Cons` !(s a) deriving (Show, Functor, Foldable, Traversable)
 infixr 4 `Cons`
+
+-- |
+-- Empty traversable
+data Nil a = Nil deriving (Show, Functor, Foldable, Traversable)
 
 -- |
 -- Compute the desired value in two stages, 
@@ -145,4 +193,22 @@ evalPlan :: Applicative f
          => Plan req res f a
          -> (forall t. Traversable t => t req -> f (t res))
          -> f a
-evalPlan task query = fst <$> runPlan task query (Const ())
+evalPlan task query = fst <$> runPlan task query Nil
+
+
+-- | Processes subproblems in FIFO order
+--
+runWithQueue :: Applicative f => (a -> Plan a b f b) -> a -> f b
+runWithQueue f a = f a `evalPlan` traverseWithQueue f
+
+traverseWithQueue :: (Traversable t, Applicative f) => (a -> Plan a b f b) -> t a -> f (t b)
+traverseWithQueue f ta = case castEmpty ta of
+  Just tb -> pure tb -- avoid infinite recursion
+  Nothing -> traverse f ta `evalPlan` traverseWithQueue f
+
+castEmpty :: Traversable t => t a -> Maybe (t b)
+castEmpty ta = case traverse (\a -> (pure a, bottom)) ta of 
+    ([], tb) -> Just tb -- ta is empty, so we didn't need bottom to construct tb
+    _        -> Nothing -- ta is non-empty
+  where bottom = error "bottom"
+

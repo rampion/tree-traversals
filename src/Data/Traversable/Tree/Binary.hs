@@ -1,13 +1,15 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Data.Traversable.Tree.Binary 
   ( inorder, InOrder(..)
   , preorder, PreOrder(..)
   , postorder, PostOrder(..)
-  , depthorder, DepthOrder(..)
+  , levelorder, LevelOrder(..)
   ) where
 
-import Data.Functor.Compose (Compose(..))
+import Control.Applicative.Backwards (Backwards(..))
+-- import Data.Functor.Compose (Compose(..))
 import Data.Traversable (foldMapDefault)
 
 import Control.Applicative.Trans.Plan
@@ -28,7 +30,7 @@ import Data.Tree.Binary
 -- [R,L]
 -- [R]
 -- [R,R]
-inorder :: forall f a b. Applicative f => (a -> f b) -> Tree a -> f (Tree b)
+inorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
 inorder _ Leaf = pure Leaf
 inorder f (Branch a la ra) = (\lb b rb -> Branch b lb rb) <$> inorder f la <*> f a <*> inorder f ra
 
@@ -43,31 +45,31 @@ inorder f (Branch a la ra) = (\lb b rb -> Branch b lb rb) <$> inorder f la <*> f
 -- [R]
 -- [R,L]
 -- [R,R]
-preorder :: forall f a b. Applicative f => (a -> f b) -> Tree a -> f (Tree b)
+preorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
 preorder _ Leaf = pure Leaf
-preorder f (Branch a la ra) = (\b bl rb -> Branch b bl rb) <$> f a <*> preorder f la <*> preorder f ra
+preorder f (Branch a la ra) = Branch <$> f a <*> preorder f la <*> preorder f ra
 
 -- | 
--- Traverse each node of the tree, then its right-subtree, then its left-subtree.
+-- Traverse each node after traversing its left and right subtrees.
 --
 -- >>> _ <- postorder print $ toDepth 3
--- []
--- [R]
--- [R,R]
--- [R,L]
--- [L]
--- [L,R]
 -- [L,L]
-postorder :: forall f a b. Applicative f => (a -> f b) -> Tree a -> f (Tree b)
+-- [L,R]
+-- [L]
+-- [R,L]
+-- [R,R]
+-- [R]
+-- []
+postorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
 postorder _ Leaf = pure Leaf
-postorder f (Branch a la ra) = (\b rb bl -> Branch b bl rb) <$> f a <*> postorder f ra <*> postorder f la
+postorder f (Branch a la ra) = (\lb rb b -> Branch b lb rb) <$> postorder f la <*> postorder f ra <*> f a
 
 -- | 
--- Traverse each node of the tree in depth-first order, left-to-right (i.e. all
+-- Traverse each node of the tree in breadth-first order, left-to-right (i.e. all
 -- nodes of depth zero, then all nodes of depth 1, then all nodes of depth 2,
 -- etc.)
 --
--- >>> _ <- depthorder print $ toDepth 3
+-- >>> _ <- levelorder print $ toDepth 3
 -- []
 -- [L]
 -- [R]
@@ -75,44 +77,46 @@ postorder f (Branch a la ra) = (\b rb bl -> Branch b bl rb) <$> f a <*> postorde
 -- [L,R]
 -- [R,L]
 -- [R,R]
-depthorder :: forall f a b. Applicative f => (a -> f b) -> Tree a -> f (Tree b)
-depthorder f = \ta -> schedule ta `evalPlan` byDepth where
+levelorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
+levelorder f = runWithQueue $ \case
+  Leaf           -> pure Leaf
+  Branch a la ra -> Branch <$> prepare (f a) <*> require la <*> require ra
 
-  schedule :: Tree a -> Plan (Tree a) (Tree b) f (Tree b)
-  schedule Leaf = pure Leaf
-  schedule (Branch a la ra) = Branch <$> prepare (f a) <*> require la <*> require ra
-
-  byDepth :: forall t. Traversable t => t (Tree a) -> f (t (Tree b))
-  byDepth tta = if null tta -- need to check to prevent infinite recursion
-    then -- tta is empty, so all this traversal does is alter the type and wrap it in f
-         -- `pure (undefined <$> tta) works just as well
-         fmap (fmap getDepthOrder . getCompose) . traverse f . Compose $ fmap DepthOrder tta 
-    else traverse schedule tta `evalPlan` byDepth
+-- | 
+-- Traverse each node of the tree in breadth-last order, left-to-right (i.e. all
+-- nodes of depth n, then all nodes of depth n-1, then all nodes of depth n-2,
+-- etc.)
+--
+-- >>> _ <- rlevelorder print $ toDepth 3
+-- [L,L]
+-- [L,R]
+-- [R,L]
+-- [R,R]
+-- [L]
+-- [R]
+-- []
+rlevelorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
+rlevelorder f = (forwards .) . runWithQueue $ \case
+  Leaf           -> pure Leaf
+  Branch a la ra -> (\b rb lb -> Branch b lb rb) <$> prepare (Backwards $ f a) <*> require ra <*> require la
 
 {-
--- the bool specifies which child to prioritize
-dfs, bfs :: forall f a b. Applicative f => (a -> (f b, Bool)) -> Tree a -> f (Tree b)
+type Search = Compose ((,) (Last Direction))
 
+dfs :: Applicative f => (a -> Search f b) -> Tree a -> Search f (Tree b)
 dfs _ Leaf = pure Leaf
-dfs f (Branch a la ra) = case f a of
-  (fb, L) -> (\b lb rb -> Branch b lb rb) <$> dfs f la <*> dfs f ra
-  (fb, R)  -> (\b rb lb -> Branch b lb rb) <$> dfs f ra <*> dfs f la
+dfs f (Branch a la ra) = let fb@(Compose (Last d, _)) = f a in case d of
+  L -> Branch <$> fb <*> dfs f la <*> dfs f ra
+  R -> (flip . Branch) <$> fb <*> dfs f ra <*> dfs f la
 
-bfs f = \ta -> schedule ta `evalPlan` byDepth where
-
-  schedule :: Tree a -> Plan (Tree a) (Tree b) f (Tree b)
-  schedule Leaf = pure Leaf
-  schedule (Branch a la ra) = Branch <$> prepare (f a) <*> require la <*> require ra
-
-  byDepth :: forall t. Traversable t => t (Tree a) -> f (t (Tree b))
-  byDepth tta = if null tta -- need to check to prevent infinite recursion
-    then -- tta is empty, so all this traversal does is alter the type and wrap it in f
-         -- `pure (undefined <$> tta) works just as well
-         fmap (fmap getDepthOrder . getCompose) . traverse f . Compose $ fmap DepthOrder tta 
-    else traverse schedule tta `evalPlan` byDepth
-      -}
-
-
+bfs :: Applicative f => (a -> Search f b) -> Tree a -> Search f (Tree b)
+bfs f = runWithQueue $ \case
+  Leaf -> pure Leaf
+  Branch a la ra -> let fb@(Compose (Last d, _)) = f a in case d of
+    L -> Branch <$> prepare fb <*> require la <*> require ra
+    R -> (flip . Branch) <$> prepare fb <*> require la <*> require ra
+    -}
+    
 -- | 'Tree' wrapper to use 'inorder' traversal
 --
 -- >>> mapM_ print . InOrder $ toDepth 3
@@ -153,16 +157,13 @@ instance Traversable PreOrder where
 -- | 'Tree' wrapper to use 'postorder' traversal
 --
 -- >>> mapM_ print . PostOrder $ toDepth 3
--- []
--- [R]
--- [R,R]
--- [R,L]
--- [L]
--- [L,R]
 -- [L,L]
--- >>> import Data.Foldable (toList)
--- >>> take 4 . toList $ PostOrder allDepths
--- [ [] , [ R ] , [ R , R ] , [ R , R , R ] ]
+-- [L,R]
+-- [L]
+-- [R,L]
+-- [R,R]
+-- [R]
+-- []
 newtype PostOrder a = PostOrder { getPostOrder :: Tree a }
   deriving Functor
 instance Foldable PostOrder where
@@ -170,9 +171,9 @@ instance Foldable PostOrder where
 instance Traversable PostOrder where
   traverse f = fmap PostOrder . postorder f . getPostOrder
 
--- | 'Tree' wrapper to use 'depthorder' traversal
+-- | 'Tree' wrapper to use 'levelorder' traversal
 --
--- >>> mapM_ print . DepthOrder $ toDepth 3
+-- >>> mapM_ print . LevelOrder $ toDepth 3
 -- []
 -- [L]
 -- [R]
@@ -181,11 +182,28 @@ instance Traversable PostOrder where
 -- [R,L]
 -- [R,R]
 -- >>> import Data.Foldable (toList)
--- >>> take 4 . toList $ DepthOrder allDepths
+-- >>> take 4 . toList $ LevelOrder allDepths
 -- [ [] , [ L ] , [ R ] , [ L , L ] ]
-newtype DepthOrder a = DepthOrder { getDepthOrder :: Tree a }
+newtype LevelOrder a = LevelOrder { getLevelOrder :: Tree a }
   deriving Functor
-instance Foldable DepthOrder where
+instance Foldable LevelOrder where
   foldMap = foldMapDefault
-instance Traversable DepthOrder where
-  traverse f = fmap DepthOrder . depthorder f . getDepthOrder
+instance Traversable LevelOrder where
+  traverse f = fmap LevelOrder . levelorder f . getLevelOrder
+
+-- | 'Tree' wrapper to use 'rlevelorder' traversal
+--
+-- >>> mapM_ print . RLevelOrder $ toDepth 3
+-- [L,L]
+-- [L,R]
+-- [R,L]
+-- [R,R]
+-- [L]
+-- [R]
+-- []
+newtype RLevelOrder a = RLevelOrder { getRLevelOrder :: Tree a }
+  deriving Functor
+instance Foldable RLevelOrder where
+  foldMap = foldMapDefault
+instance Traversable RLevelOrder where
+  traverse f = fmap RLevelOrder . rlevelorder f . getRLevelOrder
