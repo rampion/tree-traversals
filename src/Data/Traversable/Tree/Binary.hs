@@ -12,7 +12,7 @@ import Control.Applicative.Backwards (Backwards(..))
 -- import Data.Functor.Compose (Compose(..))
 import Data.Traversable (foldMapDefault)
 
-import Control.Applicative.Trans.Plan
+import Control.Applicative.Batch
 import Data.Tree.Binary
 
 -- $setup
@@ -80,7 +80,7 @@ postorder f (Branch a la ra) = (\lb rb b -> Branch b lb rb) <$> postorder f la <
 levelorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
 levelorder f = runWithQueue $ \case
   Leaf           -> pure Leaf
-  Branch a la ra -> Branch <$> prepare (f a) <*> require la <*> require ra
+  Branch a la ra -> Branch <$> lift (f a) <*> batch la <*> batch ra
 
 -- | 
 -- Traverse each node of the tree in breadth-last order, left-to-right (i.e. all
@@ -98,7 +98,7 @@ levelorder f = runWithQueue $ \case
 rlevelorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
 rlevelorder f = (forwards .) . runWithQueue $ \case
   Leaf           -> pure Leaf
-  Branch a la ra -> (\b rb lb -> Branch b lb rb) <$> prepare (Backwards $ f a) <*> require ra <*> require la
+  Branch a la ra -> (\b rb lb -> Branch b lb rb) <$> lift (Backwards $ f a) <*> batch ra <*> batch la
 
 {-
 type Search = Compose ((,) (Last Direction))
@@ -113,8 +113,8 @@ bfs :: Applicative f => (a -> Search f b) -> Tree a -> Search f (Tree b)
 bfs f = runWithQueue $ \case
   Leaf -> pure Leaf
   Branch a la ra -> let fb@(Compose (Last d, _)) = f a in case d of
-    L -> Branch <$> prepare fb <*> require la <*> require ra
-    R -> (flip . Branch) <$> prepare fb <*> require la <*> require ra
+    L -> Branch <$> lift fb <*> batch la <*> batch ra
+    R -> (flip . Branch) <$> lift fb <*> batch la <*> batch ra
     -}
     
 -- | 'Tree' wrapper to use 'inorder' traversal
