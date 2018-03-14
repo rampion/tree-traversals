@@ -1,12 +1,16 @@
 default:
 
-all: configure install-dependencies build doc test
+all: install-dependencies configure build doc test
 
 configure:
 	cabal configure --enable-tests -f development
 
-install-dependencies: .cabal-sandbox/
+install-dependencies: .cabal-sandbox install-global-dependencies
 	cabal install --enable-tests --dependencies-only
+
+install-global-dependencies:
+	which happy || ( cd .. && cabal install happy )
+	which pandoc || ( cd .. && cabal install pandoc )
 
 build:
 	cabal build
