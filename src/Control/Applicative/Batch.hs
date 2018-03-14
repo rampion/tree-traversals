@@ -41,11 +41,12 @@
 -- >   uncurryN f (a `Cons` ta) = uncurryN (f a) ta
 --
 module Control.Applicative.Batch 
-  ( Batch(..), evalBatch, runBatch, lift, batch
-  , runWithQueue, traverseWithQueue
-  , SomeBatch(..)
+  ( Batch(..), SomeBatch(..), evalBatch, runBatch, lift, batch
+  , runWithQueue, traverseWithQueue, dedupe
   ) where
 
+import Data.Foldable (foldl')
+import qualified Data.Map.Strict as Map -- "containers"
 import Control.Applicative (liftA2)
 import Control.Arrow (first)
 
@@ -191,3 +192,36 @@ castEmpty ta = case traverse (\a -> (pure a, bottom)) ta of
     _        -> Nothing -- ta is non-empty
   where bottom = error "bottom"
 
+-- | dedupe a batch handler
+--
+-- >>> decode c = putStrLn ("decoding " ++ show c) >> return (fromEnum c)
+-- >>> traverse decode "Hello world"
+-- decoding 'H'
+-- decoding 'e'
+-- decoding 'l'
+-- decoding 'l'
+-- decoding 'o'
+-- decoding ' '
+-- decoding 'w'
+-- decoding 'o'
+-- decoding 'r'
+-- decoding 'l'
+-- decoding 'd'
+-- [ 72 , 101 , 108 , 108 , 111 , 32 , 119 , 111 , 114 , 108 , 100 ]
+-- >>> dedupe (traverse decode) "Hello world"
+-- decoding ' '
+-- decoding 'H'
+-- decoding 'd'
+-- decoding 'e'
+-- decoding 'l'
+-- decoding 'o'
+-- decoding 'r'
+-- decoding 'w'
+-- [ 72 , 101 , 108 , 108 , 111 , 32 , 119 , 111 , 114 , 108 , 100 ]
+dedupe :: (Functor f, Ord q) 
+       => (forall t. Traversable t => t q -> f (t r))
+       -> (forall t. Traversable t => t q -> f (t r))
+dedupe f tq = fmap (\mr -> (mr Map.!) <$> tq) -- expand into original traversable
+            . f
+            . foldl' (\mq q -> Map.insert q q mq) Map.empty -- compress into Map
+            $ tq
