@@ -16,7 +16,7 @@
 -- > f <$> batch x <*> lift y = flip f <$> lift x <*> batch y
 --  
 -- In general, these allow you to permute any general expression
--- of type @Batch q r f a@ made of nothing but '<$>', 'pure', '<*>',
+-- of type @Batch query response f a@ made of nothing but '<$>', 'pure', '<*>',
 -- 'lift' and 'batch' into an expression of the form:
 --
 -- > lift x <*> batch y1 <*> batch y2 <*> ... <*> batch yN
@@ -41,11 +41,14 @@
 -- >   uncurryN f (a `Cons` ta) = uncurryN (f a) ta
 --
 module Control.Applicative.Batch 
-  ( Batch(..), SomeBatch(..), evalBatch, runBatch, lift, batch
+  ( Batch(..), SomeBatch(..)
+  , queryMap, responseMap
+  , evalBatch, runBatch, lift, batch
   , runWithQueue, traverseWithQueue, dedupe
   ) where
 
 import Data.Foldable (foldl')
+import Data.Functor.Product (Product(Pair))
 import qualified Data.Map.Strict as Map -- "containers"
 import Control.Applicative (liftA2)
 import Control.Arrow (first)
@@ -53,26 +56,26 @@ import Control.Arrow (first)
 -- | An Applicative transformer, 'Batch' splits the computation of @f a@ in two,
 --
 -- * 'lifted' computations from @f a@
--- * a 'batched' traversable of queries @t q@ specifying a hole in the computation
---   for a value of type @f (t r)@.
-newtype Batch q r f a = Batch 
-  { getBatch :: forall s. Traversable s => SomeBatch q r f a s }
+-- * a 'batched' traversable of queries @t query@ specifying a hole in the computation
+--   for a value of type @f (t response)@.
+newtype Batch query response f a = Batch 
+  { getBatch :: forall s. Traversable s => SomeBatch query response f a s }
 
 -- | The type used under the hood for 'Batch', as Haskell requires nested types to implement
--- @forall s. Traversable s => exists t. Traversable t => (f (t r -> (a, s r)), s q -> t q)@
-data SomeBatch q r f a s = forall t. Traversable t => SomeBatch 
-  { lifted :: f (t r -> (a, s r)) -- ^ indexed state transformer, to specify the hole
-  , batched :: s q -> t q         -- ^ difference-list encoding, for easy appending
+-- @forall s. Traversable s => exists t. Traversable t => (f (t response -> (a, s response)), s query -> t query)@
+data SomeBatch query response f a s = forall t. Traversable t => SomeBatch 
+  { lifted :: f (t response -> (a, s response)) -- ^ indexed state transformer, to specify the hole
+  , batched :: s query -> t query -- ^ difference-list encoding, for easy appending
   }
 
-instance Functor f => Functor (Batch q r f) where
+instance Functor f => Functor (Batch query response f) where
   fmap f pa = Batch $ case getBatch pa of 
     SomeBatch ha qa -> SomeBatch
       { lifted = (first f .) <$> ha
       , batched = qa
       }
 
-instance Applicative f => Applicative (Batch q r f) where
+instance Applicative f => Applicative (Batch query response f) where
   pure = lift . pure
 
   pf <*> pa = Batch $ case getBatch pa of 
@@ -83,8 +86,33 @@ instance Applicative f => Applicative (Batch q r f) where
         }
     where
       -- | '<*>' for a shape-changing indexed state monad 
-      apply :: (tf r -> (a -> b, ta r)) -> (ta r -> (a, s r)) -> (tf r -> (b, s r))
+      apply :: (tf response -> (a -> b, ta response)) -> (ta response -> (a, s response)) -> (tf response -> (b, s response))
       apply hf ha (hf -> (f, ha -> (a, result))) = (f a, result)
+
+-- | 'Batch' is covariant in its query parameter.
+--
+-- >>> :t queryMap fromEnum $ (+) <$> batch 'a' <*> batch 'b'
+-- queryMap fromEnum $ (+) <$> batch 'a' <*> batch 'b'
+--   :: (Num a, Applicative f) => Batch Int a f a
+queryMap :: Functor f => (x -> y) -> Batch x response f a -> Batch y response f a
+queryMap g ba = Batch $ case getBatch ba of
+  SomeBatch ha dx -> SomeBatch
+    { lifted = fmap (\h (Pair li ri) -> let (fa, Nil) = h li in (fa, ri)) ha
+    , batched = Pair $ g <$> dx Nil
+    }
+
+-- | 'Batch' is contravariant in its response parameter.
+--
+-- >>> :t responseMap fromEnum $ (+) <$> batch 'a' <*> batch 'b'
+-- responseMap fromEnum $ (+) <$> batch 'a' <*> batch 'b'
+--   :: (Applicative f, Enum a) => Batch Char a f Int
+responseMap :: Functor f => (x -> y) -> Batch query y f a -> Batch query x f a
+responseMap g ba = Batch $ case getBatch ba of
+  SomeBatch ha dl -> SomeBatch
+    { lifted = fmap (\h (Pair (fmap g -> ly) rx) -> let (fa, Nil) = h ly in (fa, rx)) ha
+    , batched = Pair (dl Nil)
+    }
+
 
 -- |
 -- Like 'evalBatch', but allows you to specify an extra set of
@@ -96,11 +124,11 @@ instance Applicative f => Applicative (Batch q r f) where
 -- there
 -- ( 0 , 2 `Cons` (5 `Cons` Nil) )
 runBatch :: (Applicative f, Traversable s)
-        => Batch q r f a
-        -> (forall t. Traversable t => t q -> f (t r))  -- ^ how to resolve the task requirements
-        -> s q                                          -- ^ a set of requirements unrelated to the task
-        -> f (a, s r)
-runBatch (Batch (SomeBatch lifted batched)) query (query . batched -> fresult) = lifted <*> fresult
+        => Batch query response f a
+        -> (forall t. Traversable t => t query -> f (t response))  -- ^ how to resolve the task requirements
+        -> s query                                          -- ^ a set of requirements unrelated to the task
+        -> f (a, s response)
+runBatch (Batch (SomeBatch lifted batched)) handler (handler . batched -> fresult) = lifted <*> fresult
 
 -- |
 -- Schedule this portion of the computation for the
@@ -109,7 +137,7 @@ runBatch (Batch (SomeBatch lifted batched)) query (query . batched -> fresult) =
 -- >>> lift (putStrLn "hi") `evalBatch` \t -> putStrLn "***" >> mapM print t
 -- hi
 -- *** 
-lift :: Functor f => f a -> Batch q r f a
+lift :: Functor f => f a -> Batch query response f a
 lift fa = Batch $ SomeBatch
   { lifted = (,) <$> fa
   , batched = id
@@ -122,9 +150,9 @@ lift fa = Batch $ SomeBatch
 -- >>> batch "hi" `evalBatch` \t -> putStrLn "***" >> mapM print t
 -- *** 
 -- "hi"
-batch :: Applicative f => q -> Batch q r f r
+batch :: Applicative f => query -> Batch query response f response
 batch q = Batch $ SomeBatch
-  { lifted = pure $ \(Cons r result) -> (r, result)
+  { lifted = pure $ \(Cons r rs) -> (r, rs)
   , batched = Cons q
   }
 
@@ -140,9 +168,9 @@ data Nil a = Nil deriving (Show, Functor, Foldable, Traversable)
 -- |
 -- Compute the desired value in two stages, 
 -- 
--- (1) first performing any lifted lifted actions,
--- (2) using the given callback to generate all the values batched to complete
---     the computation 
+-- (1) first performing any lifted actions,
+-- (2) using the given handler to compute the responses for the batched
+--     queries
 --
 -- >>> import Data.Char (toUpper)
 -- >>> :{
@@ -170,10 +198,10 @@ data Nil a = Nil deriving (Show, Functor, Foldable, Traversable)
 -- after: 'c'
 -- ( 'A' , "bb" , 'C' )
 evalBatch :: Applicative f
-         => Batch q r f a
-         -> (forall t. Traversable t => t q -> f (t r))
+         => Batch query response f a
+         -> (forall t. Traversable t => t query -> f (t response))
          -> f a
-evalBatch task query = fst <$> runBatch task query Nil
+evalBatch task handler = fst <$> runBatch task handler Nil
 
 
 -- | Processes subproblems in FIFO order
@@ -218,10 +246,11 @@ castEmpty ta = case traverse (\a -> (pure a, bottom)) ta of
 -- decoding 'r'
 -- decoding 'w'
 -- [ 72 , 101 , 108 , 108 , 111 , 32 , 119 , 111 , 114 , 108 , 100 ]
-dedupe :: (Functor f, Ord q) 
-       => (forall t. Traversable t => t q -> f (t r))
-       -> (forall t. Traversable t => t q -> f (t r))
-dedupe f tq = fmap (\mr -> (mr Map.!) <$> tq) -- expand into original traversable
-            . f
-            . foldl' (\mq q -> Map.insert q q mq) Map.empty -- compress into Map
-            $ tq
+dedupe :: (Functor f, Ord query) 
+       => (forall t. Traversable t => t query -> f (t response))
+       -> (forall t. Traversable t => t query -> f (t response))
+dedupe handler tq
+  = fmap (\mr -> (mr Map.!) <$> tq) -- expand into original traversable
+  . handler
+  . foldl' (\mq q -> Map.insert q q mq) Map.empty -- compress into Map
+  $ tq
