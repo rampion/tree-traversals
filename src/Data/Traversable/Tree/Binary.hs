@@ -8,7 +8,7 @@ module Data.Traversable.Tree.Binary
   , levelorder, LevelOrder(..)
   ) where
 
-import Control.Applicative.Backwards (Backwards(..))
+-- import Control.Applicative.Backwards (Backwards(..))
 -- import Data.Functor.Compose (Compose(..))
 import Data.Traversable (foldMapDefault)
 
@@ -78,7 +78,7 @@ postorder f (Branch a la ra) = (\lb rb b -> Branch b lb rb) <$> postorder f la <
 -- [R,L]
 -- [R,R]
 levelorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
-levelorder f = runWithQueue $ \case
+levelorder f = topDown $ \case
   Leaf           -> pure Leaf
   Branch a la ra -> Branch <$> lift (f a) <*> batch la <*> batch ra
 
@@ -96,9 +96,9 @@ levelorder f = runWithQueue $ \case
 -- [R]
 -- []
 rlevelorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
-rlevelorder f = (forwards .) . runWithQueue $ \case
+rlevelorder f = bottomUp $ \case
   Leaf           -> pure Leaf
-  Branch a la ra -> (\b rb lb -> Branch b lb rb) <$> lift (Backwards $ f a) <*> batch ra <*> batch la
+  Branch a la ra -> Branch <$> lift (f a) <*> batch la <*> batch ra
 
 {-
 type Search = Compose ((,) (Last Direction))
