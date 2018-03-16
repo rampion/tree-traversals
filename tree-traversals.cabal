@@ -29,12 +29,14 @@ flag Development
   manual: True
 
 library
-  exposed-modules: Data.Tree.Binary
+  exposed-modules: Control.Applicative.Batch
+                 , Data.BinaryTree
+                 , Data.Traversable.BinaryTree
+                 , Data.Traversable.Forest
                  , Data.Traversable.Tree
-                 , Data.Traversable.Tree.Binary
-                 , Control.Applicative.Batch
-  other-modules: Data.Tree.PrettyPrinter
-               , Data.Tree.Binary.PrettyPrinter
+  other-modules: PrettyPrinter.BinaryTree
+               , PrettyPrinter.Forest
+               , PrettyPrinter.Tree
   -- other-extensions:    
   build-depends:       base >=4.10 && <4.11
                ,       containers 

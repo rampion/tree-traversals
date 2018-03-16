@@ -55,7 +55,10 @@ module Control.Applicative.Batch
   ( Batch(..), SomeBatch(..)
   , queryMap, responseMap, lift, batch
   , fromBatch, toBatch
-  , runBatchWith, topDown, bottomUp, dedupe
+  , runBatchWith
+  , topDown, topDownAll
+  , bottomUp, bottomUpAll
+  , dedupe
   ) where
 
 -- local variable name conventions:
@@ -268,14 +271,48 @@ toBatch k = k $ \ma tq -> Batch $ SomeBatch
 -- (6,6)
 -- (7,7)
 -- 7
-topDown :: forall a b f. Applicative f => (a -> Batch a b f b) -> a -> f b
-topDown f = \a -> f a `runBatchWith` handler where
-  handler :: forall t c. Traversable t => f (t b -> c) -> t a -> f c
-  handler na ta = 
-    na <*> 
-    case castEmpty ta of
-      Just tb -> pure tb -- avoid infinite recursion
-      Nothing -> traverse f ta `runBatchWith` handler
+topDown :: Applicative f => (a -> Batch a b f b) -> a -> f b
+topDown f a = f a `runBatchWith` \na ta -> na <*> topDownAll f ta
+
+-- | Given a way of computing @f b@ from @a@ dependent on solving zero or more
+-- smaller subproblems of the shape @a -> f b@, recursively solve the subproblems
+-- in from shallowest to deepest simultaneously for all items in a traversable.
+--
+-- For example, consider the problem of finding the maximum value of a function
+-- over a range of inputs:
+--
+-- >>> :{
+--     maxInRange :: Ord a => (Int -> a) -> (Int,Int) -> Batch (Int,Int) a IO a
+--     maxInRange f r@(lo,hi) = lift (print r) *> if lo == hi
+--         then pure (f mid)
+--         else max <$> batch (lo,mid) <*> batch (mid+1,hi)
+--       where mid = (lo + hi) `div` 2
+--     :}
+--
+-- >>> topDownAll (maxInRange id) [(0,3),(10,15)]
+-- (0,3)
+-- (10,15)
+-- (0,1)
+-- (2,3)
+-- (10,12)
+-- (13,15)
+-- (0,0)
+-- (1,1)
+-- (2,2)
+-- (3,3)
+-- (10,11)
+-- (12,12)
+-- (13,14)
+-- (15,15)
+-- (10,10)
+-- (11,11)
+-- (13,13)
+-- (14,14)
+-- [3,15]
+topDownAll :: (Applicative f, Traversable t) => (a -> Batch a b f b) -> t a -> f (t b)
+topDownAll f ta = case traverse (Pair Nothing . f) ta of
+  Pair (Just tb) _ -> pure tb -- avoid infinitely recursing on empty traversables
+  Pair Nothing bb -> bb `runBatchWith` \nb ta -> nb <*> topDownAll f ta
 
 -- | Given a way of computing @f b@ from @a@ dependent on solving zero or more
 -- smaller subproblems of the shape @a -> f b@, recursively solve the subproblems
@@ -312,25 +349,49 @@ topDown f = \a -> f a `runBatchWith` handler where
 -- (0,7)
 -- 7
 bottomUp :: forall a b f. Applicative f => (a -> Batch a b f b) -> a -> f b
-bottomUp f = \a -> f a `runBatchWith` handler where
-  handler :: forall t c. Traversable t => f (t b -> c) -> t a -> f c
-  handler na ta =
-    case castEmpty ta of
-      Just tb -> pure tb -- avoid infinite recursion
-      Nothing -> traverse f ta `runBatchWith` handler
-    <**> na
+bottomUp f a = f a `runBatchWith` \nb ta -> bottomUpAll f ta <**> nb
 
--- | Cast the contents of a Traversable if it is empty.
+-- | Given a way of computing @f b@ from @a@ dependent on solving zero or more
+-- smaller subproblems of the shape @a -> f b@, recursively solve the subproblems
+-- in from shallowest to deepest simultaneously for all items in a traversable.
 --
--- >>> castEmpty ([1] :: [Int]) :: Maybe [Double]
--- Nothing
--- >>> castEmpty ([] :: [Int]) :: Maybe [Double]
--- Just []
-castEmpty :: Traversable t => t a -> Maybe (t b)
-castEmpty ta = case traverse (\a -> (pure a, bottom)) ta of 
-    ([], tb) -> Just tb -- ta is empty, so we didn't need bottom to construct tb
-    _        -> Nothing -- ta is non-empty
-  where bottom = error "bottom"
+-- For example, consider the problem of finding the maximum value of a function
+-- over a range of inputs:
+--
+-- >>> :{
+--     maxInRange :: Ord a => (Int -> a) -> (Int,Int) -> Batch (Int,Int) a IO a
+--     maxInRange f r@(lo,hi) = 
+--       lift (print r) *> 
+--       if lo == hi
+--         then pure (f mid)
+--         else max <$> batch (lo,mid) <*> batch (mid+1,hi)
+--       where mid = (lo + hi) `div` 2
+--     :}
+--
+-- >>> bottomUpAll (maxInRange id) [(0,3),(10,15)]
+-- (10,10)
+-- (11,11)
+-- (13,13)
+-- (14,14)
+-- (0,0)
+-- (1,1)
+-- (2,2)
+-- (3,3)
+-- (10,11)
+-- (12,12)
+-- (13,14)
+-- (15,15)
+-- (0,1)
+-- (2,3)
+-- (10,12)
+-- (13,15)
+-- (0,3)
+-- (10,15)
+-- [3,15]
+bottomUpAll :: (Applicative f, Traversable t) => (a -> Batch a b f b) -> t a -> f (t b)
+bottomUpAll f ta = case traverse (Pair Nothing . f) ta of
+  Pair (Just tb) _ -> pure tb -- avoid infinitely recursing on empty traversables
+  Pair Nothing bb -> bb `runBatchWith` \nb ta -> bottomUpAll f ta <**> nb
 
 -- | dedupe a batch operation handler
 --

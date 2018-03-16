@@ -1,9 +1,9 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
 -- |
--- Different traversals for 'Data.Tree.Binary.Tree' from "Data.Tree.Binary".
+-- Different traversals for 'Data.BinaryTree.BinaryTree' from "Data.BinaryTree".
 --
-module Data.Traversable.Tree.Binary 
+module Data.Traversable.BinaryTree
   ( inorder, InOrder(..)
   , preorder, PreOrder(..)
   , postorder, PostOrder(..)
@@ -14,13 +14,13 @@ module Data.Traversable.Tree.Binary
 import Data.Traversable (foldMapDefault)
 
 import Control.Applicative.Batch
-import Data.Tree.Binary
+import Data.BinaryTree
 
 -- $setup
--- >>> import Data.Tree.Binary.PrettyPrinter (prettyPrint)
+-- >>> import PrettyPrinter.BinaryTree (prettyPrint)
 -- >>> data Direction = L | R deriving Show
 -- >>> :{
---     example :: Tree [Direction]
+--     example :: BinaryTree [Direction]
 --     example = 
 --       Branch []
 --       ( Branch [L]
@@ -85,7 +85,7 @@ import Data.Tree.Binary
 -- [R,R,L]
 -- [R,R]
 -- [R,R,R]
-inorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
+inorder :: Applicative f => (a -> f b) -> BinaryTree a -> f (BinaryTree b)
 inorder _ Leaf = pure Leaf
 inorder f (Branch a la ra) = (\lb b rb -> Branch b lb rb) <$> inorder f la <*> f a <*> inorder f ra
 
@@ -116,7 +116,7 @@ inorder f (Branch a la ra) = (\lb b rb -> Branch b lb rb) <$> inorder f la <*> f
 -- [R,R]
 -- [R,R,L]
 -- [R,R,R]
-preorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
+preorder :: Applicative f => (a -> f b) -> BinaryTree a -> f (BinaryTree b)
 preorder _ Leaf = pure Leaf
 preorder f (Branch a la ra) = Branch <$> f a <*> preorder f la <*> preorder f ra
 
@@ -147,7 +147,7 @@ preorder f (Branch a la ra) = Branch <$> f a <*> preorder f la <*> preorder f ra
 -- [R,R]
 -- [R]
 -- []
-postorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
+postorder :: Applicative f => (a -> f b) -> BinaryTree a -> f (BinaryTree b)
 postorder _ Leaf = pure Leaf
 postorder f (Branch a la ra) = (\lb rb b -> Branch b lb rb) <$> postorder f la <*> postorder f ra <*> f a
 
@@ -180,7 +180,7 @@ postorder f (Branch a la ra) = (\lb rb b -> Branch b lb rb) <$> postorder f la <
 -- [R,R,L]
 -- [R,R,R]
 -- [L,R,L,R]
-levelorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
+levelorder :: Applicative f => (a -> f b) -> BinaryTree a -> f (BinaryTree b)
 levelorder f = topDown $ \case
   Leaf           -> pure Leaf
   Branch a la ra -> Branch <$> lift (f a) <*> batch la <*> batch ra
@@ -214,12 +214,12 @@ levelorder f = topDown $ \case
 -- [L]
 -- [R]
 -- []
-rlevelorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
+rlevelorder :: Applicative f => (a -> f b) -> BinaryTree a -> f (BinaryTree b)
 rlevelorder f = bottomUp $ \case
   Leaf           -> pure Leaf
   Branch a la ra -> Branch <$> lift (f a) <*> batch la <*> batch ra
 
--- | 'Tree' wrapper to use 'inorder' traversal
+-- | 'BinaryTree' wrapper to use 'inorder' traversal
 --
 -- >>> prettyPrint example
 --                                                []
@@ -245,14 +245,14 @@ rlevelorder f = bottomUp $ \case
 -- [R,R,L]
 -- [R,R]
 -- [R,R,R]
-newtype InOrder a = InOrder { getInOrder :: Tree a }
+newtype InOrder a = InOrder { getInOrder :: BinaryTree a }
   deriving Functor
 instance Foldable InOrder where
   foldMap = foldMapDefault
 instance Traversable InOrder where
   traverse f = fmap InOrder . inorder f . getInOrder
 
--- | 'Tree' wrapper to use 'preorder' traversal
+-- | 'BinaryTree' wrapper to use 'preorder' traversal
 --
 -- >>> prettyPrint example
 --                                                []
@@ -278,14 +278,14 @@ instance Traversable InOrder where
 -- [R,R]
 -- [R,R,L]
 -- [R,R,R]
-newtype PreOrder a = PreOrder { getPreOrder :: Tree a }
+newtype PreOrder a = PreOrder { getPreOrder :: BinaryTree a }
   deriving Functor
 instance Foldable PreOrder where
   foldMap = foldMapDefault
 instance Traversable PreOrder where
   traverse f = fmap PreOrder . preorder f . getPreOrder
 
--- | 'Tree' wrapper to use 'postorder' traversal
+-- | 'BinaryTree' wrapper to use 'postorder' traversal
 --
 -- >>> prettyPrint example
 --                                                []
@@ -311,14 +311,14 @@ instance Traversable PreOrder where
 -- [R,R]
 -- [R]
 -- []
-newtype PostOrder a = PostOrder { getPostOrder :: Tree a }
+newtype PostOrder a = PostOrder { getPostOrder :: BinaryTree a }
   deriving Functor
 instance Foldable PostOrder where
   foldMap = foldMapDefault
 instance Traversable PostOrder where
   traverse f = fmap PostOrder . postorder f . getPostOrder
 
--- | 'Tree' wrapper to use 'levelorder' traversal
+-- | 'BinaryTree' wrapper to use 'levelorder' traversal
 --
 -- >>> prettyPrint example
 --                                                []
@@ -344,14 +344,14 @@ instance Traversable PostOrder where
 -- [R,R,L]
 -- [R,R,R]
 -- [L,R,L,R]
-newtype LevelOrder a = LevelOrder { getLevelOrder :: Tree a }
+newtype LevelOrder a = LevelOrder { getLevelOrder :: BinaryTree a }
   deriving Functor
 instance Foldable LevelOrder where
   foldMap = foldMapDefault
 instance Traversable LevelOrder where
   traverse f = fmap LevelOrder . levelorder f . getLevelOrder
 
--- | 'Tree' wrapper to use 'rlevelorder' traversal
+-- | 'BinaryTree' wrapper to use 'rlevelorder' traversal
 --
 -- >>> prettyPrint example
 --                                                []
@@ -377,7 +377,7 @@ instance Traversable LevelOrder where
 -- [L]
 -- [R]
 -- []
-newtype RLevelOrder a = RLevelOrder { getRLevelOrder :: Tree a }
+newtype RLevelOrder a = RLevelOrder { getRLevelOrder :: BinaryTree a }
   deriving Functor
 instance Foldable RLevelOrder where
   foldMap = foldMapDefault

@@ -1,8 +1,8 @@
 {-# LANGUAGE DeriveFunctor #-}
 -- |
--- Different traversals for 'Data.Tree.Tree' from "Data.Tree".
+-- Different traversals for 'Data.Tree.Forest' from "Data.Tree".
 --
-module Data.Traversable.Tree
+module Data.Traversable.Forest
   ( preorder, PreOrder(..)
   , postorder, PostOrder(..)
   , levelorder, LevelOrder(..)
@@ -13,12 +13,13 @@ import Data.Traversable (foldMapDefault)
 import Data.Tree
 
 import Control.Applicative.Batch
+import qualified Data.Traversable.Tree as Tree
 
 -- $setup
--- >>> import PrettyPrinter.Tree (prettyPrint)
+-- >>> import PrettyPrinter.Forest (prettyPrint)
 -- >>> :{
---     example :: Tree [Int]
---     example = Node []
+--     example :: Forest [Int]
+--     example =
 --       [ Node [0] []
 --       , Node [1]
 --         [ Node [1,0] [] ]
@@ -41,11 +42,11 @@ import Control.Applicative.Batch
 --     :}
 
 -- |
--- Traverse each node of the tree, then its subtrees.
+-- Traverse each 'Data.Tree.Tree' in the 'Data.Tree.Forest' in
+-- 'Data.Traversable.Tree.preorder' before traversing the next one.
 --
 -- >>> prettyPrint example
---                   []
---  ┌────┬────────┬──┴────────────────┐
+--  ┌────┬────────┬───────────────────┐
 -- [0]  [1]      [2]                 [3]
 --       │     ┌──┴───┐      ┌──────┬─┴─────────┐
 --     [1,0] [2,0]  [2,1]  [3,0]  [3,1]       [3,2]
@@ -54,7 +55,6 @@ import Control.Applicative.Batch
 --                                                   │
 --                                               [3,2,1,0]
 -- >>> _ <- preorder print example
--- []
 -- [0]
 -- [1]
 -- [1,0]
@@ -70,15 +70,15 @@ import Control.Applicative.Batch
 -- [3,2,0]
 -- [3,2,1]
 -- [3,2,1,0]
-preorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
-preorder f (Node a ts) = Node <$> f a <*> traverse (preorder f) ts
+preorder :: Applicative f => (a -> f b) -> Forest a -> f (Forest b)
+preorder = traverse . Tree.preorder
 
 -- |
--- Traverse each node after traversing its subtrees.
+-- Traverse each 'Data.Tree.Tree' in the 'Data.Tree.Forest' in
+-- 'Data.Traversable.Tree.postorder' before traversing the next one.
 --
 -- >>> prettyPrint example
---                   []
---  ┌────┬────────┬──┴────────────────┐
+--  ┌────┬────────┬───────────────────┐
 -- [0]  [1]      [2]                 [3]
 --       │     ┌──┴───┐      ┌──────┬─┴─────────┐
 --     [1,0] [2,0]  [2,1]  [3,0]  [3,1]       [3,2]
@@ -102,18 +102,16 @@ preorder f (Node a ts) = Node <$> f a <*> traverse (preorder f) ts
 -- [3,2,1]
 -- [3,2]
 -- [3]
--- []
-postorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
-postorder f (Node a ts) = flip Node <$> traverse (postorder f) ts <*> f a
+postorder :: Applicative f => (a -> f b) -> Forest a -> f (Forest b)
+postorder = traverse . Tree.postorder
 
 -- |
--- Traverse each node of the tree in breadth-first order, left-to-right (i.e. all
--- nodes of depth zero, then all nodes of depth 1, then all nodes of depth 2,
--- etc.)
+-- Traverse each node of the 'Data.Tree.Forest' in breadth-first order,
+-- left-to-right (i.e. all nodes of depth zero, then all nodes of depth 1, then
+-- all nodes of depth 2, etc.)
 --
 -- >>> prettyPrint example
---                   []
---  ┌────┬────────┬──┴────────────────┐
+--  ┌────┬────────┬───────────────────┐
 -- [0]  [1]      [2]                 [3]
 --       │     ┌──┴───┐      ┌──────┬─┴─────────┐
 --     [1,0] [2,0]  [2,1]  [3,0]  [3,1]       [3,2]
@@ -122,7 +120,6 @@ postorder f (Node a ts) = flip Node <$> traverse (postorder f) ts <*> f a
 --                                                   │
 --                                               [3,2,1,0]
 -- >>> _ <- levelorder print example
--- []
 -- [0]
 -- [1]
 -- [2]
@@ -138,17 +135,16 @@ postorder f (Node a ts) = flip Node <$> traverse (postorder f) ts <*> f a
 -- [3,2,0]
 -- [3,2,1]
 -- [3,2,1,0]
-levelorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
-levelorder f = topDown $ \(Node a ts) ->  Node <$> lift (f a) <*> traverse batch ts
+levelorder :: Applicative f => (a -> f b) -> Forest a -> f (Forest b)
+levelorder f = topDownAll $ \(Node a ts) ->  Node <$> lift (f a) <*> traverse batch ts
 
 -- |
--- Traverse each node of the tree in breadth-last order, left-to-right (i.e. all
--- nodes of depth n, then all nodes of depth n-1, then all nodes of depth n-2,
--- etc.)
+-- Traverse each node of the 'Data.Tree.Forest' in breadth-last order,
+-- left-to-right (i.e. all nodes of depth n, then all nodes of depth n-1, then
+-- all nodes of depth n-2, etc.)
 --
 -- >>> prettyPrint example
---                   []
---  ┌────┬────────┬──┴────────────────┐
+--  ┌────┬────────┬───────────────────┐
 -- [0]  [1]      [2]                 [3]
 --       │     ┌──┴───┐      ┌──────┬─┴─────────┐
 --     [1,0] [2,0]  [2,1]  [3,0]  [3,1]       [3,2]
@@ -172,15 +168,13 @@ levelorder f = topDown $ \(Node a ts) ->  Node <$> lift (f a) <*> traverse batch
 -- [1]
 -- [2]
 -- [3]
--- []
-rlevelorder :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
-rlevelorder f = bottomUp $ \(Node a ts) ->  Node <$> lift (f a) <*> traverse batch ts
+rlevelorder :: Applicative f => (a -> f b) -> Forest a -> f (Forest b)
+rlevelorder f = bottomUpAll $ \(Node a ts) ->  Node <$> lift (f a) <*> traverse batch ts
 
--- | 'Tree' wrapper to use 'preorder' traversal
+-- | 'Forest' wrapper to use 'preorder' traversal
 --
 -- >>> prettyPrint example
---                   []
---  ┌────┬────────┬──┴────────────────┐
+--  ┌────┬────────┬───────────────────┐
 -- [0]  [1]      [2]                 [3]
 --       │     ┌──┴───┐      ┌──────┬─┴─────────┐
 --     [1,0] [2,0]  [2,1]  [3,0]  [3,1]       [3,2]
@@ -189,7 +183,6 @@ rlevelorder f = bottomUp $ \(Node a ts) ->  Node <$> lift (f a) <*> traverse bat
 --                                                   │
 --                                               [3,2,1,0]
 -- >>> mapM_ print $ PreOrder example
--- []
 -- [0]
 -- [1]
 -- [1,0]
@@ -205,18 +198,17 @@ rlevelorder f = bottomUp $ \(Node a ts) ->  Node <$> lift (f a) <*> traverse bat
 -- [3,2,0]
 -- [3,2,1]
 -- [3,2,1,0]
-newtype PreOrder a = PreOrder { getPreOrder :: Tree a }
+newtype PreOrder a = PreOrder { getPreOrder :: Forest a }
   deriving Functor
 instance Foldable PreOrder where
   foldMap = foldMapDefault
 instance Traversable PreOrder where
   traverse f = fmap PreOrder . preorder f . getPreOrder
 
--- | 'Tree' wrapper to use 'postorder' traversal
+-- | 'Forest' wrapper to use 'postorder' traversal
 --
 -- >>> prettyPrint example
---                   []
---  ┌────┬────────┬──┴────────────────┐
+--  ┌────┬────────┬───────────────────┐
 -- [0]  [1]      [2]                 [3]
 --       │     ┌──┴───┐      ┌──────┬─┴─────────┐
 --     [1,0] [2,0]  [2,1]  [3,0]  [3,1]       [3,2]
@@ -240,19 +232,17 @@ instance Traversable PreOrder where
 -- [3,2,1]
 -- [3,2]
 -- [3]
--- []
-newtype PostOrder a = PostOrder { getPostOrder :: Tree a }
+newtype PostOrder a = PostOrder { getPostOrder :: Forest a }
   deriving Functor
 instance Foldable PostOrder where
   foldMap = foldMapDefault
 instance Traversable PostOrder where
   traverse f = fmap PostOrder . postorder f . getPostOrder
 
--- | 'Tree' wrapper to use 'levelorder' traversal
+-- | 'Forest' wrapper to use 'levelorder' traversal
 --
 -- >>> prettyPrint example
---                   []
---  ┌────┬────────┬──┴────────────────┐
+--  ┌────┬────────┬───────────────────┐
 -- [0]  [1]      [2]                 [3]
 --       │     ┌──┴───┐      ┌──────┬─┴─────────┐
 --     [1,0] [2,0]  [2,1]  [3,0]  [3,1]       [3,2]
@@ -261,7 +251,6 @@ instance Traversable PostOrder where
 --                                                   │
 --                                               [3,2,1,0]
 -- >>> mapM_ print $ LevelOrder example
--- []
 -- [0]
 -- [1]
 -- [2]
@@ -277,18 +266,17 @@ instance Traversable PostOrder where
 -- [3,2,0]
 -- [3,2,1]
 -- [3,2,1,0]
-newtype LevelOrder a = LevelOrder { getLevelOrder :: Tree a }
+newtype LevelOrder a = LevelOrder { getLevelOrder :: Forest a }
   deriving Functor
 instance Foldable LevelOrder where
   foldMap = foldMapDefault
 instance Traversable LevelOrder where
   traverse f = fmap LevelOrder . levelorder f . getLevelOrder
 
--- | 'Tree' wrapper to use 'rlevelorder' traversal
+-- | 'Forest' wrapper to use 'rlevelorder' traversal
 --
 -- >>> prettyPrint example
---                   []
---  ┌────┬────────┬──┴────────────────┐
+--  ┌────┬────────┬───────────────────┐
 -- [0]  [1]      [2]                 [3]
 --       │     ┌──┴───┐      ┌──────┬─┴─────────┐
 --     [1,0] [2,0]  [2,1]  [3,0]  [3,1]       [3,2]
@@ -312,8 +300,7 @@ instance Traversable LevelOrder where
 -- [1]
 -- [2]
 -- [3]
--- []
-newtype RLevelOrder a = RLevelOrder { getRLevelOrder :: Tree a }
+newtype RLevelOrder a = RLevelOrder { getRLevelOrder :: Forest a }
   deriving Functor
 instance Foldable RLevelOrder where
   foldMap = foldMapDefault

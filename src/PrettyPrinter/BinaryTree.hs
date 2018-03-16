@@ -1,10 +1,9 @@
-
--- | Pretty printer for 'Data.Tree.Binary.Tree' from "Data.Tree.Binary".
-module Data.Tree.Binary.PrettyPrinter
+-- | Pretty printer for 'Data.BinaryTree.BinaryTree' from "Data.BinaryTree".
+module PrettyPrinter.BinaryTree
   ( prettyPrint
   ) where
 
-import Data.Tree.Binary
+import Data.BinaryTree
 
 -- |
 -- >>> prettyPrint Leaf
@@ -18,9 +17,9 @@ import Data.Tree.Binary
 --      ●   [R,R]
 --           ┌┴┐
 --           ● ●
-prettyPrint :: Show a => Tree a -> IO ()
+prettyPrint :: Show a => BinaryTree a -> IO ()
 prettyPrint = \t -> let (_,_,xs) = draw t in mapM_ putStrLn xs where
-  draw :: Show a => Tree a -> (Int, Int, [String])
+  draw :: Show a => BinaryTree a -> (Int, Int, [String])
   draw Leaf = (1, 0, ["●"])
   draw (Branch a l r) = (w, c, top : next : outerMeld lb rb)
     where (lw,lc,lb) = draw l
