@@ -201,16 +201,16 @@ batch q = Batch $ SomeBatch
 -- alone: Y
 -- alone: Z
 -- batched: []
--- ( Left X , Left Y , Left Z )
+-- (Left X,Left Y,Left Z)
 -- >>> runBatchWith ((,,) <$> alone X <*> batch Y <*> alone Z) handler
 -- alone: X
 -- alone: Z
 -- batched: [Y]
--- ( Left X , Right Y , Left Z )
+-- (Left X,Right Y,Left Z)
 -- >>> runBatchWith ((,,) <$> batch X <*> alone Y <*> batch Z) handler
 -- alone: Y
 -- batched: [X,Z]
--- ( Right X , Left Y , Right Z )
+-- (Right X,Left Y,Right Z)
 runBatchWith
   :: Functor f
   => Batch query response f a
@@ -347,7 +347,7 @@ castEmpty ta = case traverse (\a -> (pure a, bottom)) ta of
 -- decoding 'r'
 -- decoding 'l'
 -- decoding 'd'
--- [ 72 , 101 , 108 , 108 , 111 , 32 , 119 , 111 , 114 , 108 , 100 ]
+-- [72,101,108,108,111,32,119,111,114,108,100]
 -- >>> dedupe (traverse decode) "Hello world"
 -- decoding ' '
 -- decoding 'H'
@@ -357,7 +357,7 @@ castEmpty ta = case traverse (\a -> (pure a, bottom)) ta of
 -- decoding 'o'
 -- decoding 'r'
 -- decoding 'w'
--- [ 72 , 101 , 108 , 108 , 111 , 32 , 119 , 111 , 114 , 108 , 100 ]
+-- [72,101,108,108,111,32,119,111,114,108,100]
 dedupe :: (Functor f, Ord query) 
        => (forall t. Traversable t => t query -> f (t response))
        -> (forall t. Traversable t => t query -> f (t response))

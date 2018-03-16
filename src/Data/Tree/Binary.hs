@@ -4,10 +4,6 @@ module Data.Tree.Binary
   ( Tree(..)
   ) where
 
--- $setup
--- >>> import Text.Show.Pretty (pPrint)
--- >>> :set -interactive-print pPrint
-
 -- | A binary tree
 --
 -- Since there are multiple ways to traverse a 'Tree', see 
