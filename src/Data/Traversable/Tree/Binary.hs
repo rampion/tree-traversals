@@ -1,7 +1,5 @@
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 -- |
 -- Different traversals for 'Data.Tree.Binary.Tree' from "Data.Tree.Binary".
 --
@@ -19,8 +17,46 @@ import Control.Applicative.Batch
 import Data.Tree.Binary
 
 -- $setup
--- >>> import Text.Show.Pretty (pPrint)
--- >>> :set -interactive-print pPrint
+-- >>> import Data.Tree.Binary.PrettyPrinter (prettyPrint)
+-- >>> data Direction = L | R deriving Show
+-- >>> :{
+--     example :: Tree [Direction]
+--     example = 
+--       Branch []
+--       ( Branch [L]
+--         ( Branch [L,L]
+--           Leaf
+--           ( Branch [L,L,R]
+--             Leaf
+--             Leaf
+--           )
+--         )
+--         ( Branch [L,R]
+--           ( Branch [L,R,L]
+--             Leaf 
+--             ( Branch [L,R,L,R]
+--               Leaf
+--               Leaf
+--             )
+--           )
+--           Leaf
+--         )
+--       )
+--       ( Branch [R]
+--         Leaf
+--         ( Branch [R,R]
+--           ( Branch [R,R,L]
+--             Leaf
+--             Leaf
+--           )
+--           ( Branch [R,R,R]
+--             Leaf
+--             Leaf
+--           )
+--         )
+--       )
+--     :}
+
 
 -- | 
 -- Traverse the nodes of a tree from left-most to right-most.
@@ -347,134 +383,3 @@ instance Foldable RLevelOrder where
   foldMap = foldMapDefault
 instance Traversable RLevelOrder where
   traverse f = fmap RLevelOrder . rlevelorder f . getRLevelOrder
-
-{------------------------------------------------------------------------------
- - EXAMPLE HELPER FUNCTIONS
- ------------------------------------------------------------------------------}
-
-data Direction = L | R
-  deriving (Show, Eq, Enum)
-
-type Path = [Direction]
-
--- |
--- >>> prettyPrint Leaf
--- ●
--- >>> prettyPrint (Branch [] Leaf $ Branch [R] Leaf $ Branch [R,R] Leaf Leaf)
---     []
--- ┌───┴───┐
--- ●      [R]
---      ┌──┴──┐
---      ●   [R,R]
---           ┌┴┐
---           ● ●
-prettyPrint :: Show a => Tree a -> IO ()
-prettyPrint = \t -> let (_,_,xs) = draw t in mapM_ putStrLn xs where
-  draw :: Show a => Tree a -> (Int, Int, [String])
-  draw Leaf = (1, 0, ["●"])
-  draw (Branch a l r) = (w, c, top : next : outerMeld lb rb)
-    where (lw,lc,lb) = draw l
-          (rw,rc,rb) = draw r
-          -- make both branches equidistant from the center
-          rc' = max rc (lw - 1 - lc)
-          rw' = rw - rc + rc'
-          lw' = lc + 1 + rc'
-
-          as = show a
-          aw = length as
-          alw = (aw - 1) `div` 2
-          arw = aw - 1 - alw
-          c = max lw' alw
-          w = c + 1 + max rw' arw
-
-          top = replicate (c - alw) ' ' ++ as
-          next = concat
-            [ replicate (c - lw' + lc) ' '
-            , "┌"
-            , replicate (lw' - 1 - lc) '─'
-            , "┴"
-            , replicate rc' '─'
-            , "┐"
-            ]
-          meld ls rs = concat
-            [ replicate (c - lw') ' '
-            , take (lw' + 1) $ ls ++ repeat ' '
-            , replicate (rc' - rc) ' '
-            , rs
-            ]
-          outerMeld (x:xs) (y:ys) = meld x y : outerMeld xs ys
-          outerMeld (x:xs) [] = meld x "" : outerMeld xs []
-          outerMeld [] (y:ys) = meld "" y : outerMeld [] ys
-          outerMeld [] [] = []
-
--- |
--- >>> prettyPrint balanced
---            []
---      ┌─────┴─────┐
---     [L]         [R]
---   ┌──┴──┐     ┌──┴──┐
--- [L,L] [L,R] [R,L] [R,R]
---  ┌┴┐   ┌┴┐   ┌┴┐   ┌┴┐ 
---  ● ●   ● ●   ● ●   ● ● 
-balanced :: Tree Path
-balanced =
-  Branch []
-    ( Branch [L]
-      ( Branch [L,L] Leaf Leaf )
-      ( Branch [L,R] Leaf Leaf )
-    )
-    ( Branch [R]
-      ( Branch [R,L] Leaf Leaf )
-      ( Branch [R,R] Leaf Leaf )
-    )
-
-
--- |
--- >>> prettyPrint example
---                                                []
---                     ┌──────────────────────────┴──────────────────────────┐
---                    [L]                                                   [R]
---     ┌───────────────┴───────────────┐                             ┌───────┴───────┐
---   [L,L]                           [L,R]                           ●             [R,R]
--- ┌───┴───┐                 ┌─────────┴─────────┐                               ┌───┴───┐
--- ●    [L,L,R]           [L,R,L]                ●                            [R,R,L] [R,R,R]
---        ┌┴┐           ┌────┴────┐                                             ┌┴┐     ┌┴┐
---        ● ●           ●     [L,R,L,R]                                         ● ●     ● ●
---                               ┌┴┐                                 
---                               ● ●                                 
-example :: Tree Path
-example = 
-  Branch []
-  ( Branch [L]
-    ( Branch [L,L]
-      Leaf
-      ( Branch [L,L,R]
-        Leaf
-        Leaf
-      )
-    )
-    ( Branch [L,R]
-      ( Branch [L,R,L]
-        Leaf 
-        ( Branch [L,R,L,R]
-          Leaf
-          Leaf
-        )
-      )
-      Leaf
-    )
-  )
-  ( Branch [R]
-    Leaf
-    ( Branch [R,R]
-      ( Branch [R,R,L]
-        Leaf
-        Leaf
-      )
-      ( Branch [R,R,R]
-        Leaf
-        Leaf
-      )
-    )
-  )
-

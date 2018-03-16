@@ -33,7 +33,8 @@ library
                  , Data.Traversable.Tree
                  , Data.Traversable.Tree.Binary
                  , Control.Applicative.Batch
-  -- other-modules:       
+  other-modules: Data.Tree.PrettyPrinter
+               , Data.Tree.Binary.PrettyPrinter
   -- other-extensions:    
   build-depends:       base >=4.10 && <4.11
                -- ,       transformers

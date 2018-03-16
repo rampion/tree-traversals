@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
 -- |
 -- Different traversals for 'Data.Tree.Tree' from "Data.Tree".
@@ -12,11 +10,36 @@ module Data.Traversable.Tree
   )
   where
 
-import Data.List (foldl')
 import Data.Traversable (foldMapDefault)
 import Data.Tree
 
 import Control.Applicative.Batch
+
+-- $setup
+-- >>> import Data.Tree.PrettyPrinter (prettyPrint)
+-- >>> :{
+--     example :: Tree [Int]
+--     example = Node []
+--       [ Node [0] []
+--       , Node [1]
+--         [ Node [1,0] [] ]
+--       , Node [2]
+--         [ Node [2,0] []
+--         , Node [2,1]
+--           [ Node [2,1,0] [] ]
+--         ]
+--       , Node [3]
+--         [ Node [3,0] []
+--         , Node [3,1]
+--           [ Node [3,1,0] [] ]
+--         , Node [3,2]
+--           [ Node [3,2,0] []
+--           , Node [3,2,1] 
+--             [ Node [3,2,1,0] [] ]
+--           ]
+--         ]
+--       ]
+--     :}
 
 -- |
 -- Traverse each node of the tree, then its subtrees.
@@ -299,163 +322,3 @@ instance Foldable RLevelOrder where
   foldMap = foldMapDefault
 instance Traversable RLevelOrder where
   traverse f = fmap RLevelOrder . rlevelorder f . getRLevelOrder
-
-{------------------------------------------------------------------------------
- - EXAMPLE HELPER FUNCTIONS
- ------------------------------------------------------------------------------}
-
--- |
--- >>> prettyPrint $ Node 'a' []
--- 'a'
--- >>> prettyPrint $ Node 'a' [Node 'b' []]
--- 'a'
---  │
--- 'b'
--- >>> prettyPrint $ Node 'a' [Node 'b' [], Node 'c' []]
---   'a'
---  ┌─┴─┐
--- 'b' 'c'
--- >>> prettyPrint $ Node 'a' [Node 'b' [], Node 'c' [], Node 'd' []]
---     'a'
---  ┌───┼───┐
--- 'b' 'c' 'd'
--- >>> prettyPrint $ Node "a" [Node "bbb" [Node "ccccc" []]]
---   "a"
---    │
---  "bbb"
---    │
--- "ccccc"
--- >>> prettyPrint $ Node "a" [Node "b" [], Node "c" [Node "d" []]]
---   "a"
---  ┌─┴─┐
--- "b" "c"
---      │
---     "d"
-prettyPrint :: Show a => Tree a -> IO ()
-prettyPrint = \t -> let (_,_,xs) = draw t in mapM_ putStrLn xs where
-
-  draw :: Show a => Tree a -> (Int, Int, [String])
-  draw (Node a []) = (aw, alw, [as]) where
-    as = show a
-    aw = length as
-    alw = (aw - 1) `div` 2
-  draw (Node a [t]) = (w, c, top : next : rest) where
-    as = show a
-    aw = length as
-    alw = (aw - 1) `div` 2
-    (tw,tc,tb) = draw t
-    c = max alw tc
-    ai = c - alw
-    ti = c - tc
-    w = max (ai + aw) (ti + tw)
-    top = replicate ai ' ' ++ as
-    next = replicate c ' ' ++ "│"
-    rest = (replicate ti ' ' ++) <$> tb
-  draw (Node a ts) = (w, c, top : next : rest) where
-    as = show a
-    aw = length as
-    alw = (aw - 1) `div` 2
-    (tw, reverse -> tcs, tb) = foldl' merge (-1, [], []) $ fmap draw ts
-    tc = (head tcs + last tcs) `div` 2
-    c = max alw tc
-    ti = c - tc
-    ai = c - alw
-    w = max (ai + aw) (ti + tw)
-    top = replicate ai ' ' ++ as
-    rest = (replicate ti ' ' ++) <$> tb
-
-    cs = (ti +) <$> tcs
-    (dh : (reverse -> dl : (reverse -> di))) = zipWith (-) cs (0:cs)
-
-    
-    (xs,y:zs) = splitAt c $ concat
-      [ replicate dh ' '
-      , "┌"
-      , concat $ [ replicate (d - 1) '─' ++ "┬" | d <- di ]
-      , replicate (dl - 1) '─'
-      , "┐"
-      ]
-
-    y' = case y of
-      '┌' -> '├'
-      '┐' -> '┤'
-      '┬' -> '┼'
-      '─' -> '┴'
-      _   -> '?'
-
-    next = xs ++ y':zs
-
-
-  merge (tw, cs, tb) (w,c,b) =
-    ( tw + 1 + w
-    , (tw + 1 + c) : cs
-    , meld (tw + 1) tb b
-    )
-
-  meld w (x:xs) (y:ys) = (take w (x ++ repeat ' ') ++ y) : meld w xs ys
-  meld w [] ys = (replicate w ' ' ++) <$> ys
-  meld _ xs [] = xs
-
--- |
--- >>> prettyPrint example
---                   []
---  ┌────┬────────┬──┴────────────────┐
--- [0]  [1]      [2]                 [3]
---       │     ┌──┴───┐      ┌──────┬─┴─────────┐
---     [1,0] [2,0]  [2,1]  [3,0]  [3,1]       [3,2]
---                    │             │       ┌───┴────┐
---                 [2,1,0]       [3,1,0] [3,2,0]  [3,2,1]
---                                                   │
---                                               [3,2,1,0]
-example :: Tree [Int]
-example = Node []
-  [ Node [0] []
-  , Node [1]
-    [ Node [1,0] [] ]
-  , Node [2]
-    [ Node [2,0] []
-    , Node [2,1]
-      [ Node [2,1,0] [] ]
-    ]
-  , Node [3]
-    [ Node [3,0] []
-    , Node [3,1]
-      [ Node [3,1,0] [] ]
-    , Node [3,2]
-      [ Node [3,2,0] []
-      , Node [3,2,1] 
-        [ Node [3,2,1,0] [] ]
-      ]
-    ]
-  ]
-
--- |
--- >>> prettyPrint example'
---                   []
---     ┌───────────┬─┴─────────────┐
---    [0]         [1]             [2]
---     │        ┌──┴───┐     ┌─────┼─────┐     
---   [0,0]    [1,0]  [1,1] [2,0] [2,1] [2,2]
---     │        │
---  [0,0,0]  [1,0,0]
---     │
--- [0,0,0,0]
-example' :: Tree [Int]
-example' = Node []
-  [ Node [0]
-    [ Node [0,0]
-      [ Node [0,0,0]
-        [ Node [0,0,0,0] [] ]
-      ]
-    ]
-  , Node [1]
-    [ Node [1,0]
-      [ Node [1,0,0] [] ]
-    , Node [1,1] []
-    ]
-  , Node [2]
-    [ Node [2,0] []
-    , Node [2,1] []
-    , Node [2,2] []
-    ]
-  ]
