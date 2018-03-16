@@ -1,5 +1,8 @@
 {-# LANGUAGE DeriveFunctor #-}
-module Data.Tree.Binary where
+-- | A simple binary tree type, 'Tree'.
+module Data.Tree.Binary 
+  ( Tree(..)
+  ) where
 
 -- $setup
 -- >>> import Text.Show.Pretty (pPrint)
