@@ -30,12 +30,13 @@ flag Development
 
 library
   exposed-modules: Data.Tree.Binary
+                 , Data.Traversable.Tree
                  , Data.Traversable.Tree.Binary
                  , Control.Applicative.Batch
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.10 && <4.11
-               ,       transformers
+               -- ,       transformers
                ,       containers 
   hs-source-dirs:      src
   default-language:    Haskell2010
