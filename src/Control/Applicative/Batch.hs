@@ -6,7 +6,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TypeFamilies #-}
--- | Defines an 'Applicative' transformer, 'Batch' that allows you to postpone
+-- | Defines an 'Applicative' transformer, 'Batch', that allows you to postpone
 -- certain side-effects to be computed as a batch.
 --
 -- Loosely speaking, a value of type @'Batch' query response f a@ is a
