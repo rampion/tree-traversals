@@ -18,7 +18,8 @@ build:
 test:
 	cabal test --show-details=always
 
-doc: dist/doc/html/tree-traversals dist/doc/html/README.html
+doc: dist/doc/html/tree-traversals \
+	$(addprefix dist/doc/html/,$(addsuffix .html,$(basename $(wildcard *.md))))
 
 .cabal-sandbox:
 	cabal sandbox init
@@ -27,8 +28,8 @@ dist/doc/html/tree-traversals: tree-traversals.cabal $(shell find src -type f)
 	cabal haddock
 	touch $@
 
-dist/doc/html/README.html: README.md dist/doc/html/gfm.css
-	pandoc $< -o $@ --css gfm.css --standalone --from gfm --to html --metadata=title:README
+dist/doc/html/%.html: %.md dist/doc/html/gfm.css
+	pandoc $< -o $@ --css gfm.css --standalone --from gfm --to html --metadata=title:$*
 
 dist/doc/html/gfm.css: gfm.css
 	mkdir -p $(dir $@)
