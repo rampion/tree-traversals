@@ -44,9 +44,7 @@ flag Development
 library
   exposed-modules: Control.Applicative.Batch
                  , Data.BinaryTree
-                 , Data.Traversable.BinaryTree
-                 , Data.Traversable.Forest
-                 , Data.Traversable.Tree
+                 , Data.Traversable.TreeLike
   other-modules: PrettyPrinter.BinaryTree
                , PrettyPrinter.Forest
                , PrettyPrinter.Tree
