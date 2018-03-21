@@ -1,7 +1,10 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableSuperClasses #-}
 module Data.Traversable.TreeLike where
 
 import Control.Applicative ((<**>))
@@ -9,64 +12,109 @@ import Data.Functor.Compose (Compose(..))
 import Data.Traversable (foldMapDefault)
 import Data.Tree
 
-import Control.Applicative.Batch
 import Data.BinaryTree
 
-class (Functor tree, TreeLike (Sub tree)) => TreeLike tree where
-  type Sub tree :: * -> *
-  treeTraverse :: Applicative f => (a -> f b) -> (Sub tree a -> f (Sub tree b)) -> tree a -> f (tree b)
+class Functor tree => TreeLike tree where
+  treeTraverse :: Applicative f 
+               => (a -> f b)
+               -> (forall subtree. TreeLike subtree => subtree a -> f (subtree b))
+               -> tree a -> f (tree b)
 
 instance TreeLike Tree where
-  type Sub Tree = Tree
   treeTraverse f g (Node a as) = Node <$> f a <*> traverse g as
 
 instance TreeLike BinaryTree where
-  type Sub BinaryTree = BinaryTree
   treeTraverse _ _ Leaf = pure Leaf
   treeTraverse f g (Branch a l r) = flip Branch <$> g l <*> f a <*> g r
 
 instance (Traversable f, TreeLike tree) => TreeLike (Compose f tree) where
-  type Sub (Compose f tree) = tree
   treeTraverse _ g (Compose trees) = Compose <$> traverse g trees
   
 inorder :: (Applicative f, TreeLike tree) => (a -> f b) -> tree a -> f (tree b)
 inorder f = treeTraverse f (inorder f)
-  
+
+data Batch query response f a = forall trees. Batch
+  { lifted   :: f (TreeList trees response -> a)
+  , batched  :: TreeList trees query
+  }
+
+instance Functor f => Functor (Batch query response f) where
+  fmap f (Batch lifted batched) = Batch
+    { lifted = (f .) <$> lifted
+    , batched = batched
+    }
+
+instance Applicative f => Applicative (Batch query response f) where
+  pure = lift . pure
+  Batch lf bf <*> Batch la ba = append bf ba $ \split -> Batch
+    $ (\kf ka (split -> ~(bf,ba)) -> kf bf (ka ba)) <$> lf <*> la
+
+append :: TreeList x a 
+       -> TreeList y a 
+       -> (forall z. (forall b. TreeList z b -> (TreeList x b, TreeList y b)) -> TreeList z a -> r)
+       -> r
+append TreeNil trees k = k (\trees -> (TreeNil, trees)) trees
+append (TreeCons t x) y k = append x y $ \split -> 
+  k (\(TreeCons t (split -> ~(x, y))) -> (TreeCons t x, y)) . TreeCons t
+
+data TreeList trees a where
+  TreeNil :: TreeList '[] a
+  TreeCons :: TreeLike tree => tree a -> TreeList trees a -> TreeList (tree ': trees) a
+
+treeListTraverse :: Applicative f => (forall tree. TreeLike tree => tree a -> f (tree b)) -> TreeList trees a -> f (TreeList trees b)
+treeListTraverse _ TreeNil = pure TreeNil
+treeListTraverse f (TreeCons tree trees) = TreeCons <$> f tree <*> treeListTraverse f trees
+
+lift :: Functor f => f a -> Batch query response f a
+lift fa = Batch
+  { lifted = const <$> fa
+  , batched = TreeNil
+  }
+
+batch :: Applicative f => TreeLike tree => tree query -> Batch query response f (tree response)
+batch tree = Batch
+  { lifted = pure $ \(TreeCons tree TreeNil) -> tree
+  , batched = TreeCons tree TreeNil
+  }
+
 batchSubTrees :: (Applicative f, TreeLike tree)
-              => (a -> f b) -> tree a -> Batch (Sub tree a) (Sub tree b) f (tree b)
+              => (a -> f b) -> tree a -> Batch a b f (tree b)
 batchSubTrees f = treeTraverse (lift . f) batch 
+
+runBatchWith :: Batch query response f a -> (forall trees. f (TreeList trees response -> a) -> TreeList trees query -> f a) -> f a
+runBatchWith (Batch lifted batched) k = k lifted batched
 
 preorder :: (Applicative f, TreeLike tree) => (a -> f b) -> tree a -> f (tree b)
 preorder f tree = batchSubTrees f tree `runBatchWith` \nb ta ->
-  nb <*> traverse (preorder f) ta
+  nb <*> treeListTraverse (preorder f) ta
   
 postorder :: (Applicative f, TreeLike tree) => (a -> f b) -> tree a -> f (tree b)
 postorder f tree = batchSubTrees f tree `runBatchWith` \nb ta ->
-  traverse (postorder f) ta <**> nb
+  treeListTraverse (postorder f) ta <**> nb
 
 levelorder :: (Applicative f, TreeLike tree) => (a -> f b) -> tree a -> f (tree b)
 levelorder = \f tree -> batchSubTrees f tree `runBatchWith` topDownHandler f where
 
-  topDownHandler :: (Applicative f, Traversable t, TreeLike tree)
+  topDownHandler :: Applicative f
                  => (a -> f b) 
-                 -> f (t (tree b) -> r)
-                 -> t (tree a)
+                 -> f (TreeList trees b -> r)
+                 -> TreeList trees a
                  -> f r
-  topDownHandler f nb ta = nb <*> case traverse (const Nothing) ta of
+  topDownHandler f nb ta = nb <*> case treeListTraverse (const Nothing) ta of
     Just tb -> pure tb -- avoid infinite recursion on empty traversables
-    Nothing -> traverse (batchSubTrees f) ta `runBatchWith` topDownHandler f
+    Nothing -> treeListTraverse (batchSubTrees f) ta `runBatchWith` topDownHandler f
 
 rlevelorder :: (Applicative f, TreeLike tree) => (a -> f b) -> tree a -> f (tree b)
 rlevelorder = \f tree -> batchSubTrees f tree `runBatchWith` bottomUpHandler f where
 
-  bottomUpHandler :: (Applicative f, Traversable t, TreeLike tree)
+  bottomUpHandler :: Applicative f
                   => (a -> f b) 
-                  -> f (t (tree b) -> r)
-                  -> t (tree a)
+                  -> f (TreeList trees b -> r)
+                  -> TreeList trees a
                   -> f r
-  bottomUpHandler f nb ta = (<**> nb) $ case traverse (const Nothing) ta of
+  bottomUpHandler f nb ta = (<**> nb) $ case treeListTraverse (const Nothing) ta of
     Just tb -> pure tb -- avoid infinite recursion on empty traversables
-    Nothing -> traverse (batchSubTrees f) ta `runBatchWith` bottomUpHandler f
+    Nothing -> treeListTraverse (batchSubTrees f) ta `runBatchWith` bottomUpHandler f
 
 newtype InOrder tree a = InOrder { getInOrder :: tree a }
   deriving Functor
