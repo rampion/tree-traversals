@@ -272,7 +272,7 @@ toBatch k = k $ \ma tq -> Batch $ SomeBatch
 -- (7,7)
 -- 7
 topDown :: Applicative f => (a -> Batch a b f b) -> a -> f b
-topDown f a = f a `runBatchWith` \na ta -> na <*> topDownAll f ta
+topDown f a = f a `runBatchWith` \nb ta -> nb <*> topDownAll f ta
 
 -- | Given a way of computing @f b@ from @a@ dependent on solving zero or more
 -- smaller subproblems of the shape @a -> f b@, recursively solve the subproblems
