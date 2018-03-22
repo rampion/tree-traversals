@@ -42,12 +42,10 @@ flag Development
   manual: True
 
 library
-  exposed-modules: Control.Applicative.Batch
+  exposed-modules: Control.Applicative.Phases
                  , Data.BinaryTree
                  , Data.Traversable.TreeLike
-  other-modules: PrettyPrinter.BinaryTree
-               , PrettyPrinter.Forest
-               , PrettyPrinter.Tree
+  other-modules: Drawing
   -- other-extensions:    
   build-depends:       base >=4.10 && <4.11
                ,       containers 
@@ -61,6 +59,8 @@ test-suite doctests
   main-is: doctests.hs
   build-depends: base
                , doctest >=0.13 && <0.14
+               , containers 
+               , mtl
   default-language: Haskell2010
   if flag(development)
     ghc-options: -Wall -Wextra -Werror
