@@ -15,7 +15,7 @@
 --    /__inorder__/ traversal iterates through this sequence visiting values and
 --    traversing subtrees in the order they are given.
 --
---        >>> prettyPrint (label inorder exampleBinaryTree)
+--        >>> printTree (label inorder exampleBinaryTree)
 --              ┌──────6───┐
 --              │          │
 --          ┌──2┴───┐   ┌7─┴──┐
@@ -33,7 +33,7 @@
 --  /__preorder__/ traversal visits all the values in the sequence before
 --  traversing the subtrees.
 --
---        >>> prettyPrint (label preorder exampleBinaryTree)
+--        >>> printTree (label preorder exampleBinaryTree)
 --              ┌──────0───┐
 --              │          │
 --          ┌──1┴───┐   ┌7─┴──┐
@@ -52,7 +52,7 @@
 --  before visiting the values in the sequence before
 --  traversing the subtrees.
 --
---        >>> prettyPrint (label postorder exampleBinaryTree)
+--        >>> printTree (label postorder exampleBinaryTree)
 --              ┌──────10───┐
 --              │           │
 --          ┌──5┴───┐    ┌9─┴─┐
@@ -74,7 +74,7 @@
 --  subtree's subtrees, and so on. This is also known as a breadth-first
 --  traversal.
 --
---        >>> prettyPrint (label levelorder exampleBinaryTree)
+--        >>> printTree (label levelorder exampleBinaryTree)
 --               ┌──────0───┐
 --               │          │
 --          ┌──1─┴───┐   ┌2─┴─┐
@@ -94,7 +94,7 @@
 --  reversed levelorder traversal interweaves their traversals, working
 --  from the deepest level up, though still in left-to-right order.
 --
---        >>> prettyPrint (label rlevelorder exampleBinaryTree)
+--        >>> printTree (label rlevelorder exampleBinaryTree)
 --              ┌──────10───┐
 --              │           │
 --          ┌──8┴───┐    ┌9─┴─┐
@@ -127,6 +127,8 @@ module Data.Traversable.TreeLike
   -- | = Traversable wrappers
   -- These @newtype@s define 'Traversable' instances for 'TreeLike' types.
   , InOrder(..), PreOrder(..), PostOrder(..), LevelOrder(..), RLevelOrder(..)
+  -- | = Convenience functions
+  , showTree, printTree
   ) where
 
 import Data.Functor.Compose (Compose(..))
@@ -138,47 +140,36 @@ import Data.Tree hiding (Forest)
 
 import Control.Applicative.Phases
 import Data.BinaryTree
+import Data.Monoid.TreeDiagram
+
+-- | Render the tree as a string, using the 'TreeDiagram' monoid.
+showTree :: (TreeLike tree, Show a) => tree a -> ShowS
+showTree = showTreeDiagram . treeFoldMap singleton subtree
+
+-- | Print the tree, using the 'TreeDiagram' monoid.
+printTree :: (TreeLike tree, Show a) => tree a -> IO ()
+printTree = putStrLn . ($[]) . showTree
 
 -- | Notionally, functors are 'TreeLike' if any values and 'TreeLike'
 -- substructure they contain can be traversed distinctly.
 --
--- For example, given the 'Drawing' monoid where
---
--- - @drawShow :: Show a => a -> Drawing@ renders any 'Show'able value as a
---   single-line drawing,
---
---        >>> drawShow 'a'
---        'a'
---
--- - @mappend@ composes two drawings horizontally, connecting them via a
---   horizontal line at the top,
---
---        >>> drawShow 'a' `mappend` drawShow 'b'
---        'a'─'b'
---
--- - @uptick@ extends a line upward from an drawing, creating a new top line
---
---        >>> uptick (drawShow 'a') `mappend` drawShow 'b'
---         ┌─'b'
---         │
---        'a'
---
--- One can use 'treeTraverse' with the  @'Const' Drawing@ applicative to
--- recursively create a drawing of any tree, rendering values inline and
--- dropping a line to drawings of subtrees:
+-- For example, given the 'TreeDiagram' monoid, one can use 'treeTraverse' with
+-- the  'Const' applicative to recursively create a drawing of any tree,
+-- rendering values inline with 'singleton' and dropping a line to drawings of
+-- subtrees with 'subtree':
 --
 -- >>> :{
--- prettyPrint :: (Show a, TreeLike tree) => tree a -> IO ()
--- prettyPrint = putDrawing . drawTree where
---   drawTree :: (Show a, TreeLike tree) => tree a -> Drawing
---   drawTree = getConst . treeTraverse (Const . drawShow) (Const . uptick . drawTree)
+-- printTree :: (Show a, TreeLike tree) => tree a -> IO ()
+-- printTree = printTreeDiagram . drawTree where
+--   drawTree :: (Show a, TreeLike tree) => tree a -> TreeDiagram
+--   drawTree = getConst . treeTraverse (Const . singleton) (Const . subtree . drawTree)
 -- :}
 --
 -- This common pattern of mapping each element to a monoid and then modifying
 -- each monoidal value generated from a subtree is captured by 'treeFoldMap', which
--- gives a slightly less verbose implementation of @prettyPrint@.
+-- gives a slightly less verbose implementation of @printTree@.
 --
--- >>> prettyPrint = putDrawing . treeFoldMap drawShow uptick
+-- >>> printTree = printTreeDiagram . treeFoldMap singleton subtree
 --
 -- Instances of 'TreeLike' are encouraged to avoid recursively defining
 -- 'treeTraverse' in terms of itself, and to instead traverse subtrees
@@ -206,9 +197,9 @@ import Data.BinaryTree
 -- :}
 --
 -- This definition exposes the substructure in a way that can be used
--- by functions implemented in terms of 'treeTraverse', such as @prettyPrint@:
+-- by functions implemented in terms of 'treeTraverse', such as @printTree@:
 --
--- >>> prettyPrint $ 1 `Cons` (2,3) `Cons` ((4,5),(6,7)) `Cons` Nil
+-- >>> printTree $ 1 `Cons` (2,3) `Cons` ((4,5),(6,7)) `Cons` Nil
 --    ┌───1───┐
 --    │       │
 --  ┌─2─┐   ┌─3─┐
@@ -227,7 +218,7 @@ class Functor tree => TreeLike tree where
 --
 -- For example, one can find the maximum depth of a tree:
 --
--- >>> prettyPrint exampleTree
+-- >>> printTree exampleTree
 -- []─┬─────┬───────────┬─────────────────────────────┐
 --    │     │           │                             │
 --   [0] [1]┴─┐  [2]──┬─┴─────┐       [3]──┬───────┬──┴──────────────┐
@@ -263,7 +254,7 @@ instance TreeLike BinaryTree where
 --
 -- >>> smallBinaryTree = Branch (Branch Leaf [0,1] Leaf) [0] (Branch Leaf [0,2] Leaf)
 -- >>> smallRoseTree = Node [1] [Node [1,0] [], Node [1,1] [], Node [1,2] [], Node [1,3] []]
--- >>> prettyPrint $ Pair smallBinaryTree smallRoseTree
+-- >>> printTree $ Pair smallBinaryTree smallRoseTree
 --         ┌────────────────────┐
 --         │                    │
 --    ┌───[0]───┐   [1]──┬─────┬┴────┬─────┐
@@ -281,7 +272,7 @@ instance TreeLike BinaryTree where
 -- [1,2]
 -- [1,3]
 -- [1]
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 --    ┌───────┐
 --    │       │
 --  ┌─2─┐ 7┬─┬┴┬─┐
@@ -299,7 +290,7 @@ instance (TreeLike fst, TreeLike snd) => TreeLike (Product fst snd) where
 -- >>> someTree b = if not b then InL smallBinaryTree else InR smallRoseTree
 -- >>> :t someTree
 -- someTree :: Num a => Bool -> Sum BinaryTree Tree [a]
--- >>> prettyPrint (someTree False)
+-- >>> printTree (someTree False)
 --         ╷
 --         │
 --    ┌───[0]───┐
@@ -307,7 +298,7 @@ instance (TreeLike fst, TreeLike snd) => TreeLike (Product fst snd) where
 -- ┌[0,1]┐   ┌[0,2]┐
 -- │     │   │     │
 -- ╵     ╵   ╵     ╵
--- >>> prettyPrint (someTree True)
+-- >>> printTree (someTree True)
 --             ╷
 --             │
 -- [1]──┬─────┬┴────┬─────┐
@@ -321,7 +312,7 @@ instance (TreeLike left, TreeLike right) => TreeLike (Sum left right) where
 -- A newtype wrapper to allow traversing an entire traversable of trees
 -- simultaneously.
 --
--- >>> prettyPrint $ Forest exampleTrees
+-- >>> printTree $ Forest exampleTrees
 --  ┌─────┬───────────┬─────────────────────────────┐
 --  │     │           │                             │
 -- [0] [1]┴─┐  [2]──┬─┴─────┐       [3]──┬───────┬──┴──────────────┐
@@ -348,7 +339,7 @@ instance (TreeLike left, TreeLike right) => TreeLike (Sum left right) where
 -- [3,2,0]
 -- [3,2,1]
 -- [3,2,1,0]
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 -- ┌──┬───┬────────┐
 -- │  │   │        │
 -- 0 1┤ 2┬┴─┐ 3┬──┬┴────┐
@@ -362,7 +353,7 @@ instance (TreeLike left, TreeLike right) => TreeLike (Sum left right) where
 -- This is more of a convenience than a necessity, as @'Forest' t tree ~
 -- 'Compose' ('Flat' t) tree@
 --
--- >>> prettyPrint . Compose $ Flat exampleTrees
+-- >>> printTree . Compose $ Flat exampleTrees
 --  ┌─────┬───────────┬─────────────────────────────┐
 --  │     │           │                             │
 -- [0] [1]┴─┐  [2]──┬─┴─────┐       [3]──┬───────┬──┴──────────────┐
@@ -382,7 +373,7 @@ instance (Traversable t, TreeLike tree) => TreeLike (Forest t tree) where
 -- A newtype wrapper for @[a]@ whose `TreeLike` instance
 -- treats each cons-cell as a tree containing one value and one subtree.
 --
--- >>> prettyPrint $ List [1..5]
+-- >>> printTree $ List [1..5]
 -- 1─┐
 --   │
 --  2┴┐
@@ -400,7 +391,7 @@ instance (Traversable t, TreeLike tree) => TreeLike (Forest t tree) where
 -- 
 -- Contrast with @'Flat' [] a@:
 --
--- >>> prettyPrint $ Flat [1..5]
+-- >>> printTree $ Flat [1..5]
 -- 1─2─3─4─5
 -- >>> toList . PostOrder $ Flat [1..5]
 -- [1,2,3,4,5]
@@ -418,7 +409,7 @@ instance TreeLike List where
 -- A newtype wraper for @t a@ whose `TreeLike` instance treats
 -- the @t a@ as a flat structure with no subtrees.
 --
--- >>> prettyPrint $ Flat [1..5]
+-- >>> printTree $ Flat [1..5]
 -- 1─2─3─4─5
 -- >>> import Data.Foldable (toList)
 -- >>> toList . PostOrder $ Flat [1..5]
@@ -444,7 +435,7 @@ instance Traversable t => TreeLike (Flat t) where
 --      (Branch Leaf (Node 'i' [Node 'i' [Node 'j' [Node 'k' []]]]) Leaf)
 -- :}
 -- 
--- >>> prettyPrint exampleCompose
+-- >>> printTree exampleCompose
 --         ┌─────────────┬───────────────┐
 --         │             │               │
 -- ┌───────┼───────┐ 'e'─┴──┐     ┌────┬─┴──────┐
@@ -463,7 +454,7 @@ instance (TreeLike outer, TreeLike inner) => TreeLike (Compose outer inner) wher
   
 -- | Traverse all the values in a tree in left-to-right order.
 --
--- >>> prettyPrint exampleBinaryTree
+-- >>> printTree exampleBinaryTree
 --                     ┌──────────────────────[]────────┐
 --                     │                                │
 --      ┌─────────[L]──┴─────────────┐          ┌[R]────┴──────┐
@@ -488,7 +479,7 @@ instance (TreeLike outer, TreeLike inner) => TreeLike (Compose outer inner) wher
 -- [R,R,L]
 -- [R,R]
 -- [R,R,R]
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 --       ┌──────6───┐
 --       │          │
 --   ┌──2┴───┐   ┌7─┴──┐
@@ -500,7 +491,7 @@ instance (TreeLike outer, TreeLike inner) => TreeLike (Compose outer inner) wher
 --   ╵ ╵ ╵ ┌4┐     ╵ ╵ ╵  ╵
 --         │ │
 --         ╵ ╵
--- >>> prettyPrint exampleTree
+-- >>> printTree exampleTree
 -- []─┬─────┬───────────┬─────────────────────────────┐
 --    │     │           │                             │
 --   [0] [1]┴─┐  [2]──┬─┴─────┐       [3]──┬───────┬──┴──────────────┐
@@ -527,7 +518,7 @@ instance (TreeLike outer, TreeLike inner) => TreeLike (Compose outer inner) wher
 -- [3,2,0]
 -- [3,2,1]
 -- [3,2,1,0]
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 -- 0┬──┬───┬─────────┐
 --  │  │   │         │
 --  1 2┤ 4┬┴─┐ 8┬───┬┴─────┐
@@ -543,7 +534,7 @@ inorder f = treeTraverse f (inorder f)
 -- | Traverse all the values of a node, then recurse into each of its subtrees
 -- in left-to-right order.
 --
--- >>> prettyPrint exampleBinaryTree
+-- >>> printTree exampleBinaryTree
 --                     ┌──────────────────────[]────────┐
 --                     │                                │
 --      ┌─────────[L]──┴─────────────┐          ┌[R]────┴──────┐
@@ -568,7 +559,7 @@ inorder f = treeTraverse f (inorder f)
 -- [R,R]
 -- [R,R,L]
 -- [R,R,R]
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 --       ┌──────0───┐
 --       │          │
 --   ┌──1┴───┐   ┌7─┴──┐
@@ -580,7 +571,7 @@ inorder f = treeTraverse f (inorder f)
 --   ╵ ╵ ╵ ┌6┐     ╵ ╵ ╵  ╵
 --         │ │
 --         ╵ ╵
--- >>> prettyPrint exampleTree
+-- >>> printTree exampleTree
 -- []─┬─────┬───────────┬─────────────────────────────┐
 --    │     │           │                             │
 --   [0] [1]┴─┐  [2]──┬─┴─────┐       [3]──┬───────┬──┴──────────────┐
@@ -607,7 +598,7 @@ inorder f = treeTraverse f (inorder f)
 -- [3,2,0]
 -- [3,2,1]
 -- [3,2,1,0]
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 -- 0┬──┬───┬─────────┐
 --  │  │   │         │
 --  1 2┤ 4┬┴─┐ 8┬───┬┴─────┐
@@ -623,7 +614,7 @@ preorder f = runPhasesForwards . treeTraverse (now . f) (later . preorder f)
 -- | Traverse all the values of a node after recursing into each of its
 -- subtrees in left-to-right order.
 --
--- >>> prettyPrint exampleBinaryTree
+-- >>> printTree exampleBinaryTree
 --                     ┌──────────────────────[]────────┐
 --                     │                                │
 --      ┌─────────[L]──┴─────────────┐          ┌[R]────┴──────┐
@@ -648,7 +639,7 @@ preorder f = runPhasesForwards . treeTraverse (now . f) (later . preorder f)
 -- [R,R]
 -- [R]
 -- []
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 --       ┌──────10───┐
 --       │           │
 --   ┌──5┴───┐    ┌9─┴─┐
@@ -660,7 +651,7 @@ preorder f = runPhasesForwards . treeTraverse (now . f) (later . preorder f)
 --   ╵ ╵ ╵ ┌2┐      ╵ ╵ ╵ ╵
 --         │ │
 --         ╵ ╵
--- >>> prettyPrint exampleTree
+-- >>> printTree exampleTree
 -- []─┬─────┬───────────┬─────────────────────────────┐
 --    │     │           │                             │
 --   [0] [1]┴─┐  [2]──┬─┴─────┐       [3]──┬───────┬──┴──────────────┐
@@ -687,7 +678,7 @@ preorder f = runPhasesForwards . treeTraverse (now . f) (later . preorder f)
 -- [3,2]
 -- [3]
 -- []
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 -- 15┬──┬───┬─────────┐
 --   │  │   │         │
 --   0 2┤ 6┬┴─┐ 14┬──┬┴────┐
@@ -704,7 +695,7 @@ postorder f = runPhasesBackwards . treeTraverse (now . f) (later . postorder f)
 -- (i.e. all nodes of depth @0@, then all nodes of depth @1@, then all nodes of
 -- depth @2@, etc.)
 --
--- >>> prettyPrint exampleBinaryTree
+-- >>> printTree exampleBinaryTree
 --                     ┌──────────────────────[]────────┐
 --                     │                                │
 --      ┌─────────[L]──┴─────────────┐          ┌[R]────┴──────┐
@@ -729,7 +720,7 @@ postorder f = runPhasesBackwards . treeTraverse (now . f) (later . postorder f)
 -- [R,R,L]
 -- [R,R,R]
 -- [L,R,L,R]
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 --        ┌──────0───┐
 --        │          │
 --   ┌──1─┴───┐   ┌2─┴─┐
@@ -741,7 +732,7 @@ postorder f = runPhasesBackwards . treeTraverse (now . f) (later . postorder f)
 --   ╵ ╵ ╵ ┌10┐     ╵ ╵ ╵ ╵
 --         │  │
 --         ╵  ╵
--- >>> prettyPrint exampleTree
+-- >>> printTree exampleTree
 -- []─┬─────┬───────────┬─────────────────────────────┐
 --    │     │           │                             │
 --   [0] [1]┴─┐  [2]──┬─┴─────┐       [3]──┬───────┬──┴──────────────┐
@@ -768,7 +759,7 @@ postorder f = runPhasesBackwards . treeTraverse (now . f) (later . postorder f)
 -- [3,2,0]
 -- [3,2,1]
 -- [3,2,1,0]
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 -- 0┬──┬───┬─────────┐
 --  │  │   │         │
 --  1 2┤ 3┬┴─┐ 4┬──┬─┴────┐
@@ -787,7 +778,7 @@ levelorder = \f -> runPhasesForwards . schedule f where
 -- (i.e. all nodes of @n@, then all nodes of depth @n-1@, then all nodes of
 -- depth @n-2@, etc.)
 --
--- >>> prettyPrint exampleBinaryTree
+-- >>> printTree exampleBinaryTree
 --                     ┌──────────────────────[]────────┐
 --                     │                                │
 --      ┌─────────[L]──┴─────────────┐          ┌[R]────┴──────┐
@@ -812,7 +803,7 @@ levelorder = \f -> runPhasesForwards . schedule f where
 -- [L]
 -- [R]
 -- []
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 --       ┌──────10───┐
 --       │           │
 --   ┌──8┴───┐    ┌9─┴─┐
@@ -824,7 +815,7 @@ levelorder = \f -> runPhasesForwards . schedule f where
 --   ╵ ╵ ╵ ┌0┐      ╵ ╵ ╵ ╵
 --         │ │
 --         ╵ ╵
--- >>> prettyPrint exampleTree
+-- >>> printTree exampleTree
 -- []─┬─────┬───────────┬─────────────────────────────┐
 --    │     │           │                             │
 --   [0] [1]┴─┐  [2]──┬─┴─────┐       [3]──┬───────┬──┴──────────────┐
@@ -851,7 +842,7 @@ levelorder = \f -> runPhasesForwards . schedule f where
 -- [2]
 -- [3]
 -- []
--- >>> prettyPrint traversed
+-- >>> printTree traversed
 -- 15─┬──┬─────┬────────┐
 --    │  │     │        │
 --   11 12┐ 13┬┴─┐ 14┬──┼────┐
@@ -868,7 +859,7 @@ rlevelorder = \f -> runPhasesBackwards . schedule f where
 
 -- | 'Tree' wrapper to use 'inorder' traversal
 --
--- >>> prettyPrint exampleBinaryTree
+-- >>> printTree exampleBinaryTree
 --                     ┌──────────────────────[]────────┐
 --                     │                                │
 --      ┌─────────[L]──┴─────────────┐          ┌[R]────┴──────┐
@@ -901,7 +892,7 @@ instance TreeLike tree => Traversable (InOrder tree) where
 
 -- | 'Tree' wrapper to use 'preorder' traversal
 --
--- >>> prettyPrint exampleBinaryTree
+-- >>> printTree exampleBinaryTree
 --                     ┌──────────────────────[]────────┐
 --                     │                                │
 --      ┌─────────[L]──┴─────────────┐          ┌[R]────┴──────┐
@@ -934,7 +925,7 @@ instance TreeLike tree => Traversable (PreOrder tree) where
 
 -- | 'Tree' wrapper to use 'postorder' traversal
 --
--- >>> prettyPrint exampleBinaryTree
+-- >>> printTree exampleBinaryTree
 --                     ┌──────────────────────[]────────┐
 --                     │                                │
 --      ┌─────────[L]──┴─────────────┐          ┌[R]────┴──────┐
@@ -967,7 +958,7 @@ instance TreeLike tree => Traversable (PostOrder tree) where
 
 -- | 'Tree' wrapper to use 'levelorder' traversal
 --
--- >>> prettyPrint exampleBinaryTree
+-- >>> printTree exampleBinaryTree
 --                     ┌──────────────────────[]────────┐
 --                     │                                │
 --      ┌─────────[L]──┴─────────────┐          ┌[R]────┴──────┐
@@ -1000,7 +991,7 @@ instance TreeLike tree => Traversable (LevelOrder tree) where
 
 -- | 'Tree' wrapper to use 'rlevelorder' traversal
 --
--- >>> prettyPrint exampleBinaryTree
+-- >>> printTree exampleBinaryTree
 --                     ┌──────────────────────[]────────┐
 --                     │                                │
 --      ┌─────────[L]──┴─────────────┐          ┌[R]────┴──────┐
@@ -1034,9 +1025,7 @@ instance TreeLike tree => Traversable (RLevelOrder tree) where
 -- $setup
 -- >>> :set -XDeriveFunctor
 -- >>> import Control.Monad.State
--- >>> import Drawing
 -- >>> data Direction = L | R deriving Show
--- >>> prettyPrint = putDrawing . treeFoldMap drawShow uptick
 -- >>> :{
 -- next :: a -> State Int Int
 -- next = const . state $ \n -> (n, n+1)
