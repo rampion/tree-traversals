@@ -1,3 +1,4 @@
+cabal-version:       2.2
 name:                tree-traversals
 version:             0.1.0.0
 synopsis:            Functions and newtype wrappers for traversing Trees
@@ -30,7 +31,7 @@ description:
   @'Data.Functor.Product' fstTree sndTree@, @'Data.Functor.Sum' leftTree rightTree@).
 
 homepage:            https://github.com/rampion/tree-traversals
-license:             PublicDomain
+license:             CC0-1.0
 license-file:        LICENSE
 author:              Noah Luck Easterly
 maintainer:          noah.easterly@gmail.com
@@ -38,7 +39,6 @@ category:            Data
 build-type:          Simple
 extra-source-files:  ChangeLog.md
                   ,  README.md
-cabal-version:       >=1.10
 
 source-repository head
   type: git
