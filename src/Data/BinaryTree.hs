@@ -7,6 +7,6 @@ module Data.BinaryTree
 -- | A binary tree
 --
 -- Since there are multiple ways to traverse a 'BinaryTree', see 
--- "Data.Traversable.BinaryTree" for newtype-wrappers with 'Traversable' instances.
-data BinaryTree a = Leaf | Branch a (BinaryTree a) (BinaryTree a)
+-- "Data.Traversable.TreeLike" for newtype-wrappers with 'Traversable' instances.
+data BinaryTree a = Leaf | Branch (BinaryTree a) a (BinaryTree a)
   deriving (Show, Functor, Eq)
