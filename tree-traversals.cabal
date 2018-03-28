@@ -31,6 +31,7 @@ description:
 
 homepage:            https://github.com/rampion/tree-traversals
 license:             PublicDomain
+license-file:        LICENSE
 author:              Noah Luck Easterly
 maintainer:          noah.easterly@gmail.com
 category:            Data
