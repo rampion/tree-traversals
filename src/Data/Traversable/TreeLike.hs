@@ -230,8 +230,11 @@ class Functor tree => TreeLike tree where
 --                                                                             [3,2,1,0]
 -- >>> :set -XGeneralizedNewtypeDeriving
 -- >>> import GHC.Natural
+-- >>> import Data.Semigroup
 -- >>> :{
 -- newtype Max = Max { getMax :: Natural } deriving (Num, Enum)
+-- instance Semigroup Max where
+--   (<>) = mappend
 -- instance Monoid Max where
 --   mempty = Max 0
 --   Max a `mappend` Max b = Max $ a `max` b

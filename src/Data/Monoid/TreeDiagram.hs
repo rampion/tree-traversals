@@ -77,7 +77,8 @@ singleton a = NonEmpty
 --
 -- >>> printTreeDiagram $ singleton 'a' <> singleton 'b'
 -- 'a'─'b'
-instance Semigroup TreeDiagram
+instance Semigroup TreeDiagram where
+  (<>) = mappend
 -- |
 -- 'mempty' is the empty tree diagram
 --
