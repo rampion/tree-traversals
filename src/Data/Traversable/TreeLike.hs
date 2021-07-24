@@ -141,6 +141,8 @@ import Data.Tree hiding (Forest)
 import Control.Applicative.Phases
 import Data.BinaryTree
 import Data.Monoid.TreeDiagram
+import Control.Comonad.Cofree (Cofree(..))
+import Control.Monad.Free (Free(..))
 
 -- | Render the tree as a string, using the 'TreeDiagram' monoid.
 showTree :: (TreeLike tree, Show a) => tree a -> ShowS
@@ -251,6 +253,13 @@ instance TreeLike Tree where
 instance TreeLike BinaryTree where
   treeTraverse _ _ Leaf = pure Leaf
   treeTraverse f g (Branch l a r) = Branch <$> g l <*> f a <*> g r
+
+instance Traversable f => TreeLike (Cofree f) where
+  treeTraverse f g (a :< fa) = (:<) <$> f a <*> traverse g fa
+
+instance Traversable f => TreeLike (Free f) where
+  treeTraverse f g (Pure a) = Pure <$> f a
+  treeTraverse f g (Free fa) = Free <$> traverse g fa
 
 -- |
 -- Use 'Product' to combine a pair of 'TreeLike' values into a single tree.

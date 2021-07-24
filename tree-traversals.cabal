@@ -62,6 +62,7 @@ library
   -- other-extensions:    
   build-depends:       base >=4.10
                ,       containers
+               ,       free
   hs-source-dirs:      src
   default-language:    Haskell2010
   if flag(development)
@@ -74,6 +75,7 @@ test-suite doctests
                , doctest >=0.13
                , containers
                , mtl >=2.2.1
+               , free
   default-language: Haskell2010
   if flag(development)
     ghc-options: -Wall -Wextra -Werror
