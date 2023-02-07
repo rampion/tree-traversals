@@ -148,7 +148,7 @@ showTree = showTreeDiagram . treeFoldMap singleton subtree
 
 -- | Print the tree, using the 'TreeDiagram' monoid.
 printTree :: (TreeLike tree, Show a) => tree a -> IO ()
-printTree = putStrLn . ($[]) . showTree
+printTree = putStrLn . ($ []) . showTree
 
 -- | Notionally, functors are 'TreeLike' if any values and 'TreeLike'
 -- substructure they contain can be traversed distinctly.

@@ -55,7 +55,7 @@ showTreeDiagram NonEmpty{..} =
 
 -- | print a tree diagram
 printTreeDiagram :: TreeDiagram -> IO ()
-printTreeDiagram = putStrLn . ($[]) . showTreeDiagram
+printTreeDiagram = putStrLn . ($ []) . showTreeDiagram
 
 -- | draw a value as a simple, single-line tree diagram
 --
@@ -78,19 +78,9 @@ singleton a = NonEmpty
 -- >>> printTreeDiagram $ singleton 'a' <> singleton 'b'
 -- 'a'─'b'
 instance Semigroup TreeDiagram where
-  (<>) = mappend
--- |
--- 'mempty' is the empty tree diagram
---
--- >>> printTreeDiagram mempty
--- <BLANKLINE>
--- >>> printTreeDiagram $ mempty <> singleton 'a' <> mempty
--- 'a'
-instance Monoid TreeDiagram where
-  mempty = Empty
-  Empty `mappend` d = d
-  d `mappend` Empty = d
-  a `mappend` b = NonEmpty
+  Empty <> d = d
+  d <> Empty = d
+  a <> b = NonEmpty
     { graph = \o -> 
         let uptickIndex' = uptickIndex o - graphWidth a
             midline = if 0 <= uptickIndex' && uptickIndex' < graphPadding
@@ -113,6 +103,16 @@ instance Monoid TreeDiagram where
           padding = fromEnum (blo <= ahi && alo <= bhi)
           (alo,ahi) = rightLimit a
           (blo,bhi) = leftLimit b
+-- |
+-- 'mempty' is the empty tree diagram
+--
+-- >>> printTreeDiagram mempty
+-- <BLANKLINE>
+-- >>> printTreeDiagram $ mempty <> singleton 'a' <> mempty
+-- 'a'
+instance Monoid TreeDiagram where
+  mempty = Empty
+  mappend = (<>)
 
 
 -- | Full width of a tree diagram
