@@ -234,10 +234,10 @@ class Functor tree => TreeLike tree where
 -- >>> :{
 -- newtype Max = Max { getMax :: Natural } deriving (Num, Enum)
 -- instance Semigroup Max where
---   (<>) = mappend
+--   Max a <> Max b = Max $ a `max` b
 -- instance Monoid Max where
 --   mempty = Max 0
---   Max a `mappend` Max b = Max $ a `max` b
+--   mappend = (<>)
 -- :}
 --
 -- >>> getMax $ treeFoldMap (const 0) succ exampleTree
